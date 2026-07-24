@@ -42,10 +42,121 @@
 
 #ifndef FLORENCE_GREETER
 /*
- * Session default open position: same as greeter (center on built-in panel,
- * one cursor-height above the panel bottom), then raised by the FVWM
- * taskbar height so the keyboard sits above the Start bar.
+ * Session: center on built-in panel, above FVWM taskbar; portrait fit like
+ * greeter. Live RandR geometry (never stale FLORENCE_PANEL_* from login).
  */
+#include <X11/extensions/Xrandr.h>
+
+#define SESSION_GLYPH_H 44
+#define SESSION_GLYPH_MARGIN 20
+#define SESSION_TASKBAR_DEFAULT 40
+
+static guint session_monitors_debounce_id;
+static guint session_monitors_settle_id;
+static gdouble session_saved_landscape_scale;
+static int session_in_portrait_fit;
+
+void view_create_window_mask(struct view *view);
+void view_live_scale(struct view *view, gdouble scale, gint pin_x, gint pin_y);
+
+static int
+session_name_is_internal(const char *name)
+{
+
+	if (name == NULL)
+		return (0);
+	if (strncmp(name, "eDP", 3) == 0)
+		return (1);
+	if (strncmp(name, "LVDS", 4) == 0)
+		return (1);
+	if (strncmp(name, "DSI", 3) == 0)
+		return (1);
+	return (0);
+}
+
+static int
+session_panel_xrandr(gint *px, gint *py, gint *pw, gint *ph)
+{
+	Display *xdpy;
+	Window root;
+	XRRScreenResources *res;
+	XRROutputInfo *oi;
+	XRRCrtcInfo *ci;
+	int i;
+	int fx = 0, fy = 0, fw = 0, fh = 0;
+	int pox = 0, poy = 0, pow = 0, poh = 0;
+	int have_first = 0, have_pri = 0;
+	RROutput primary;
+
+	xdpy = gdk_x11_get_default_xdisplay();
+	if (!xdpy)
+		return (0);
+	root = DefaultRootWindow(xdpy);
+	res = XRRGetScreenResourcesCurrent(xdpy, root);
+	if (!res)
+		return (0);
+	primary = XRRGetOutputPrimary(xdpy, root);
+
+	for (i = 0; i < res->noutput; i++) {
+		oi = XRRGetOutputInfo(xdpy, res, res->outputs[i]);
+		if (!oi)
+			continue;
+		if (oi->connection != RR_Connected || oi->crtc == None) {
+			XRRFreeOutputInfo(oi);
+			continue;
+		}
+		ci = XRRGetCrtcInfo(xdpy, res, oi->crtc);
+		if (!ci || ci->mode == None) {
+			if (ci)
+				XRRFreeCrtcInfo(ci);
+			XRRFreeOutputInfo(oi);
+			continue;
+		}
+		if (session_name_is_internal(oi->name)) {
+			*px = ci->x;
+			*py = ci->y;
+			*pw = (gint)ci->width;
+			*ph = (gint)ci->height;
+			XRRFreeCrtcInfo(ci);
+			XRRFreeOutputInfo(oi);
+			XRRFreeScreenResources(res);
+			return (*pw > 0 && *ph > 0);
+		}
+		if (!have_first) {
+			fx = ci->x;
+			fy = ci->y;
+			fw = (int)ci->width;
+			fh = (int)ci->height;
+			have_first = 1;
+		}
+		if (!have_pri && primary == res->outputs[i]) {
+			pox = ci->x;
+			poy = ci->y;
+			pow = (int)ci->width;
+			poh = (int)ci->height;
+			have_pri = 1;
+		}
+		XRRFreeCrtcInfo(ci);
+		XRRFreeOutputInfo(oi);
+	}
+	XRRFreeScreenResources(res);
+	if (have_pri && pow > 0 && poh > 0) {
+		*px = pox;
+		*py = poy;
+		*pw = pow;
+		*ph = poh;
+		return (1);
+	}
+	if (have_first && fw > 0 && fh > 0) {
+		*px = fx;
+		*py = fy;
+		*pw = fw;
+		*ph = fh;
+		return (1);
+	}
+	return (0);
+}
+
 static int
 session_builtin_panel(gint *px, gint *py, gint *pw, gint *ph)
 {
@@ -53,6 +164,10 @@ session_builtin_panel(gint *px, gint *py, gint *pw, gint *ph)
 	GdkDisplay *dpy;
 	GdkRectangle geo;
 	GdkMonitor *m;
+
+	/* Live CRTC first — login FLORENCE_PANEL_* goes stale after rotate. */
+	if (session_panel_xrandr(px, py, pw, ph))
+		return (1);
 
 	ex = getenv("FLORENCE_PANEL_X");
 	ey = getenv("FLORENCE_PANEL_Y");
@@ -83,12 +198,162 @@ session_builtin_panel(gint *px, gint *py, gint *pw, gint *ph)
 	return (1);
 }
 
+static gdouble
+session_preferred_landscape_scale(struct view *view, gdouble cur)
+{
+	gdouble want;
+
+	want = session_saved_landscape_scale;
+	if (want < 10.0 && view->status &&
+	    view->status->resize_scale_launch >= 10.0)
+		want = view->status->resize_scale_launch;
+	if (want < 10.0)
+		want = settings_get_double(SETTINGS_SCALEX);
+	if (want < 10.0)
+		want = cur;
+	if (want < 10.0)
+		want = 10.0;
+	if (want > 72.0)
+		want = 72.0;
+	return (want);
+}
+
+static void
+session_fit_scale_for_panel(struct view *view, gint pw, gint ph, gint margin,
+    gint taskbar)
+{
+	gdouble fit_w, fit_h, fit, cur, want;
+	gint max_w, max_h, pin_x, pin_y, bottom_clear;
+	int portrait;
+
+	if (!view || view->vwidth < 1.0 || view->vheight < 1.0)
+		return;
+	if (margin < 8)
+		margin = 8;
+	bottom_clear = margin + SESSION_GLYPH_H + SESSION_GLYPH_MARGIN + taskbar;
+	portrait = (pw < ph);
+	cur = view->scalex;
+	if (cur < 1.0)
+		cur = settings_get_double(SETTINGS_SCALEX);
+
+	pin_x = settings_get_int(SETTINGS_XPOS);
+	pin_y = settings_get_int(SETTINGS_YPOS);
+	if (view->window)
+		gtk_window_get_position(view->window, &pin_x, &pin_y);
+
+	if (portrait) {
+		if (!session_in_portrait_fit) {
+			session_saved_landscape_scale =
+			    session_preferred_landscape_scale(view, cur);
+			session_in_portrait_fit = 1;
+		}
+		max_w = pw - 2 * margin;
+		max_h = ph - margin - bottom_clear;
+		if (max_w < 32)
+			max_w = pw > 32 ? pw - margin : pw;
+		if (max_h < 32)
+			max_h = ph > 32 ? ph / 2 : ph;
+		fit_w = (gdouble)max_w / view->vwidth;
+		fit_h = (gdouble)max_h / view->vheight;
+		fit = fit_w < fit_h ? fit_w : fit_h;
+		if (fit < 10.0)
+			fit = 10.0;
+		if (fit > 72.0)
+			fit = 72.0;
+		if (session_saved_landscape_scale > 0.0 &&
+		    fit > session_saved_landscape_scale)
+			fit = session_saved_landscape_scale;
+		if (fabs(fit - cur) < 0.05 &&
+		    (gint)view->width <= max_w + 2 &&
+		    (gint)view->height <= max_h + 2)
+			return;
+		view_live_scale(view, fit, pin_x, pin_y);
+	} else {
+		/*
+		 * Landscape: always restore preferred scale when we were in
+		 * portrait fit or the shell is still portrait-shrunk. Do not
+		 * clear the saved scale — a mid-rotate spurious landscape
+		 * event must not forget it for the real settle.
+		 */
+		want = session_preferred_landscape_scale(view, cur);
+		if (session_in_portrait_fit || cur + 0.05 < want) {
+			if (fabs(want - cur) >= 0.05)
+				view_live_scale(view, want, pin_x, pin_y);
+		}
+		session_in_portrait_fit = 0;
+		if (want >= 10.0)
+			session_saved_landscape_scale = want;
+	}
+}
+
+/*
+ * True if keyboard center sits on a non-eDP connected output (user parked it
+ * on an external). Off-desk / below-panel gaps are NOT "external" — those
+ * must be re-homed (POLA on show after rotate).
+ */
+static int
+session_keyboard_on_external(struct view *view)
+{
+	Display *xdpy;
+	Window root;
+	XRRScreenResources *res;
+	XRROutputInfo *oi;
+	XRRCrtcInfo *ci;
+	gint wx, wy, ww, wh, cx, cy;
+	int i, on_ext = 0;
+
+	if (!view || !view->window)
+		return (0);
+	gtk_window_get_position(view->window, &wx, &wy);
+	gtk_window_get_size(view->window, &ww, &wh);
+	cx = wx + ww / 2;
+	cy = wy + wh / 2;
+
+	xdpy = gdk_x11_get_default_xdisplay();
+	if (!xdpy)
+		return (0);
+	root = DefaultRootWindow(xdpy);
+	res = XRRGetScreenResourcesCurrent(xdpy, root);
+	if (!res)
+		return (0);
+
+	for (i = 0; i < res->noutput; i++) {
+		oi = XRRGetOutputInfo(xdpy, res, res->outputs[i]);
+		if (!oi)
+			continue;
+		if (oi->connection != RR_Connected || oi->crtc == None) {
+			XRRFreeOutputInfo(oi);
+			continue;
+		}
+		ci = XRRGetCrtcInfo(xdpy, res, oi->crtc);
+		if (!ci || ci->mode == None) {
+			if (ci)
+				XRRFreeCrtcInfo(ci);
+			XRRFreeOutputInfo(oi);
+			continue;
+		}
+		if (cx >= (gint)ci->x && cy >= (gint)ci->y &&
+		    cx < (gint)(ci->x + ci->width) &&
+		    cy < (gint)(ci->y + ci->height)) {
+			if (!session_name_is_internal(oi->name))
+				on_ext = 1;
+			XRRFreeCrtcInfo(ci);
+			XRRFreeOutputInfo(oi);
+			break;
+		}
+		XRRFreeCrtcInfo(ci);
+		XRRFreeOutputInfo(oi);
+	}
+	XRRFreeScreenResources(res);
+	return (on_ext);
+}
+
 static void
 session_place_keyboard(struct view *view)
 {
 	GdkDisplay *dpy;
 	const char *em, *et;
-	gint px, py, pw, ph, ww, wh, margin, taskbar, x, y;
+	gint px, py, pw, ph, ww, wh, margin, taskbar, bottom_clear, x, y;
 
 	if (!view || !view->window)
 		return;
@@ -99,10 +364,6 @@ session_place_keyboard(struct view *view)
 		pw = gdk_screen_get_width(gdk_screen_get_default());
 		ph = gdk_screen_get_height(gdk_screen_get_default());
 	}
-	ww = (gint)view->width;
-	wh = (gint)view->height;
-	if (ww < 1 || wh < 1)
-		gtk_window_get_size(view->window, &ww, &wh);
 
 	em = getenv("FLORENCE_PLACE_MARGIN");
 	if (em && atoi(em) > 0)
@@ -113,22 +374,131 @@ session_place_keyboard(struct view *view)
 			margin = 24;
 	}
 	et = getenv("FLORENCE_TASKBAR_H");
-	taskbar = (et && atoi(et) > 0) ? atoi(et) : 40;
+	taskbar = (et && atoi(et) > 0) ? atoi(et) : SESSION_TASKBAR_DEFAULT;
+	bottom_clear = margin + SESSION_GLYPH_H + SESSION_GLYPH_MARGIN + taskbar;
+
+	session_fit_scale_for_panel(view, pw, ph, margin, taskbar);
+
+	ww = (gint)view->width;
+	wh = (gint)view->height;
+	if (ww < 1 || wh < 1)
+		gtk_window_get_size(view->window, &ww, &wh);
 
 	x = px + (pw - ww) / 2;
-	y = py + ph - wh - margin - taskbar;
+	y = py + ph - wh - bottom_clear;
 	if (x < px)
 		x = px;
 	if (y < py)
 		y = py;
-	gtk_window_move(view->window, x, y);
-	settings_set_int(SETTINGS_XPOS, x);
-	settings_set_int(SETTINGS_YPOS, y);
+	if (x + ww > px + pw)
+		x = px + pw - ww;
+	if (y + wh > py + ph)
+		y = py + ph - wh;
+	if (x < px)
+		x = px;
+	if (y < py)
+		y = py;
+
+	{
+		GdkWindow *gdkw;
+
+		gtk_widget_set_size_request(GTK_WIDGET(view->window), ww, wh);
+		gdkw = gtk_widget_get_window(GTK_WIDGET(view->window));
+		if (gdkw) {
+			gtk_window_resize(view->window, ww, wh);
+			gdk_window_move_resize(gdkw, x, y, ww, wh);
+			/*
+			 * Match greeter: refresh XShape after place. Skip
+			 * settings_set_int here — keyfile rewrite mid-RandR
+			 * races FVWM and can leave the mapped shell stuck.
+			 */
+			if (settings_get_bool(SETTINGS_TRANSPARENT) &&
+			    !view->composite)
+				view_create_window_mask(view);
+			else
+				gtk_widget_queue_draw(GTK_WIDGET(view->window));
+		} else {
+			gtk_window_resize(view->window, ww, wh);
+			gtk_window_move(view->window, x, y);
+		}
+	}
+	/* In-memory pins only (greeter policy). */
 	if (view->status) {
 		view->status->move_launch_x = x;
 		view->status->move_launch_y = y;
 		view->status->move_launch_valid = TRUE;
+		view->status->resize_shell_w = (guint)ww;
+		view->status->resize_shell_h = (guint)wh;
 	}
+}
+
+static gboolean
+session_monitors_settle_idle(gpointer data)
+{
+	struct view *view = (struct view *)data;
+
+	session_monitors_settle_id = 0;
+	if (!view || !view->window)
+		return FALSE;
+	if (!gtk_widget_get_visible(GTK_WIDGET(view->window)))
+		return FALSE;
+	/* Second pass after FVWM/RandR finish rearranging the desk. */
+	session_place_keyboard(view);
+	return FALSE;
+}
+
+static gboolean
+session_monitors_reposition_idle(gpointer data)
+{
+	struct view *view = (struct view *)data;
+
+	session_monitors_debounce_id = 0;
+	if (!view || !view->window)
+		return FALSE;
+	if (!gtk_widget_get_visible(GTK_WIDGET(view->window)))
+		return FALSE;
+	/*
+	 * Always re-home on RandR settle. Pre-rotate absolute coords can land
+	 * on an external CRTC after P→L; skipping those left the OSK stuck
+	 * until hide/show. (view_show still honors on-external parking.)
+	 */
+	session_place_keyboard(view);
+	if (session_monitors_settle_id)
+		g_source_remove(session_monitors_settle_id);
+	session_monitors_settle_id = g_timeout_add(500,
+	    session_monitors_settle_idle, view);
+	return FALSE;
+}
+
+static void
+session_on_monitors_changed(GdkScreen *screen, gpointer data)
+{
+	struct view *view = (struct view *)data;
+
+	(void)screen;
+	if (session_monitors_debounce_id)
+		g_source_remove(session_monitors_debounce_id);
+	/* Wait for xrandr + autorotate (+ FVWM) to settle before place. */
+	session_monitors_debounce_id = g_timeout_add(500,
+	    session_monitors_reposition_idle, view);
+}
+
+static void
+session_watch_monitors(struct view *view)
+{
+	GdkScreen *screen;
+
+	if (!view)
+		return;
+	screen = gdk_screen_get_default();
+	if (!screen)
+		return;
+	g_signal_handlers_disconnect_by_func(screen,
+	    G_CALLBACK(session_on_monitors_changed), view);
+	g_signal_connect(screen, "monitors-changed",
+	    G_CALLBACK(session_on_monitors_changed), view);
+	g_signal_connect(screen, "size-changed",
+	    G_CALLBACK(session_on_monitors_changed), view);
 }
 #endif
 
@@ -149,8 +519,17 @@ void view_show (struct view *view)
 	/* Some window managers forget it */
 	gtk_window_set_keep_above(view->window, TRUE);
 	/* Do not set urgency_hint — WMs pulse/flash it and the hover flickers. */
-	/* reposition the window */
+#ifndef FLORENCE_GREETER
+	/*
+	 * Re-home for current eDP orientation unless parked on an external.
+	 * Covers first-open in portrait (stale landscape XPOS) and hide/show
+	 * while stuck below the desk after a rotate.
+	 */
+	if (!session_keyboard_on_external(view))
+		session_place_keyboard(view);
+#else
 	gtk_window_move(view->window, settings_get_int(SETTINGS_XPOS), settings_get_int(SETTINGS_YPOS));
+#endif
 #ifdef AT_SPI
 	/* positionnement intelligent */
 	if (settings_get_bool(SETTINGS_AUTO_HIDE) && 
@@ -231,8 +610,6 @@ void view_resize (struct view *view)
  * Live-resize: window size always matches content (grow and shrink). Pin is
  * client NW root origin at press. Art is rebuilt each frame — never stretched.
  */
-void view_create_window_mask(struct view *view);
-
 void view_live_scale (struct view *view, gdouble scale, gint pin_x, gint pin_y)
 {
 	START_FUNC
@@ -360,6 +737,11 @@ void view_live_scale_commit (struct view *view)
 void view_restore_open_position (struct view *view)
 {
 	START_FUNC
+#ifndef FLORENCE_GREETER
+	if (!view || !view->window)
+		return;
+	session_place_keyboard(view);
+#else
 	gint x, y;
 
 	if (!view || !view->window)
@@ -374,6 +756,7 @@ void view_restore_open_position (struct view *view)
 	gtk_window_move(view->window, x, y);
 	settings_set_int(SETTINGS_XPOS, x);
 	settings_set_int(SETTINGS_YPOS, y);
+#endif
 	END_FUNC
 }
 
@@ -1222,6 +1605,9 @@ struct view *view_new (struct status *status, struct style *style, GSList *keybo
 
 	/* set the window icon */
 	tools_set_icon(view->window);
+#ifndef FLORENCE_GREETER
+	session_watch_monitors(view);
+#endif
 	END_FUNC
 	return view;
 }
