@@ -260,8 +260,61 @@
     <type>unextend</type>
     <_label>ABC</_label>
   </symbol>
-<symbol>
+  <symbol>
     <type>fn</type>
     <label>Fn</label>
+  </symbol>
+  <!-- Fn-layer media icons (matched via gdk_keyval_name) -->
+  <symbol>
+    <name>XF86AudioMute</name>
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" viewBox="0 0 100 100" version="1.1" height="100">
+      <path d="M 22,38 38,38 54,26 54,74 38,62 22,62 Z" class="symbol"/>
+      <path d="M 60,36 68,36 84,62 76,62 Z" class="symbol"/>
+      <path d="M 76,36 84,36 68,62 60,62 Z" class="symbol"/>
+    </svg>
+  </symbol>
+  <symbol>
+    <name>XF86AudioLowerVolume</name>
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" viewBox="0 0 100 100" version="1.1" height="100">
+      <path d="M 18,38 34,38 50,26 50,74 34,62 18,62 Z" class="symbol"/>
+      <path d="M 58,40 C 68,45 68,55 58,60 L 62,66 C 76,58 76,42 62,34 Z" class="symbol"/>
+</svg>
+  </symbol>
+  <symbol>
+    <name>XF86AudioRaiseVolume</name>
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" viewBox="0 0 100 100" version="1.1" height="100">
+      <path d="M 12,38 28,38 44,26 44,74 28,62 12,62 Z" class="symbol"/>
+      <path d="M 50,42 C 58,46 58,54 50,58 L 54,64 C 66,56 66,44 54,36 Z" class="symbol"/>
+      <path d="M 58,34 C 72,42 72,58 58,66 L 62,72 C 80,62 80,38 62,28 Z" class="symbol"/>
+      <path d="M 66,26 C 86,38 86,62 66,74 L 70,80 C 94,66 94,34 70,20 Z" class="symbol"/>
+</svg>
+  </symbol>
+  <symbol>
+    <name>XF86MonBrightnessDown</name>
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" viewBox="0 0 100 100" version="1.1" height="100">
+      <circle cx="50" cy="50" r="7" class="symbol"/>
+      <path d="M 48,28 52,28 52,34 48,34 Z M 48,66 52,66 52,72 48,72 Z M 28,48 34,48 34,52 28,52 Z M 66,48 72,48 72,52 66,52 Z M 33,33 37,33 37,37 33,37 Z M 63,63 67,63 67,67 63,67 Z M 63,33 67,33 67,37 63,37 Z M 33,63 37,63 37,67 33,67 Z" class="symbol"/>
+</svg>
+  </symbol>
+  <symbol>
+    <name>XF86MonBrightnessUp</name>
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" viewBox="0 0 100 100" version="1.1" height="100">
+      <circle cx="50" cy="50" r="11" class="symbol"/>
+      <path d="M 48,14 52,14 52,26 48,26 Z M 48,74 52,74 52,86 48,86 Z M 14,48 26,48 26,52 14,52 Z M 74,48 86,48 86,52 74,52 Z M 24,24 30,24 30,30 24,30 Z M 70,70 76,70 76,76 70,76 Z M 70,24 76,24 76,30 70,30 Z M 24,70 30,70 30,76 24,76 Z" class="symbol"/>
+</svg>
+  </symbol>
+  <symbol>
+    <name>XF86Display</name>
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" viewBox="0 0 100 100" version="1.1" height="100">
+      <!-- Hollow monitors via evenodd fill (white @SYM_COLOR@); avoid stroke which uses black outline color -->
+      <path class="symbol" fill-rule="evenodd" d="M16,26 H60 V60 H16 Z M22,32 H54 V54 H22 Z M40,40 H84 V74 H40 Z M46,46 H78 V68 H46 Z"/>
+    </svg>
+  </symbol>
+  <symbol>
+    <name>XF86AudioMedia</name>
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" viewBox="0 0 100 100" version="1.1" height="100">
+      <!-- 8-tooth gear, rotationally + vertically symmetric about 50,50 -->
+      <path class="symbol" fill-rule="evenodd" d="M44.43,24.60 L45.74,16.27 L54.26,16.27 L55.57,24.60 L64.02,28.10 L70.84,23.13 L76.87,29.16 L71.90,35.98 L75.40,44.43 L83.73,45.74 L83.73,54.26 L75.40,55.57 L71.90,64.02 L76.87,70.84 L70.84,76.87 L64.02,71.90 L55.57,75.40 L54.26,83.73 L45.74,83.73 L44.43,75.40 L35.98,71.90 L29.16,76.87 L23.13,70.84 L28.10,64.02 L24.60,55.57 L16.27,54.26 L16.27,45.74 L24.60,44.43 L28.10,35.98 L23.13,29.16 L29.16,23.13 L35.98,28.10 Z M50,50 m-11,0 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0"/>
+    </svg>
   </symbol>
 </symbols>
