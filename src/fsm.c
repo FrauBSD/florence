@@ -43,14 +43,14 @@ static fsm_action fsm_unlatch_lock[]={ status_unlatch, status_lock, status_updat
 static fsm_action fsm_lock[]={ status_lock, status_update_view, NULL };
 static fsm_action fsm_unlock[]={ status_unlock, status_update_view, NULL };
 /*
- * Press latched mods, send the character, then immediately release/clear the
- * one-shot latch (iPad-style). Waiting for ButtonRelease fails on touch —
- * release is often lost, so Shift stayed lit after "Shift then A".
- * Locked mods (second tap) are only X-released here; they stay LOCKED.
+ * Press latched mods, send the character, X-release mods. Do NOT unlatch /
+ * rebuild symbols here — that hid Fn media icons while the mouse was still
+ * held for auto-repeat. Unlatch + symbol refresh run on ButtonRelease
+ * (fsm_release_latched). Locked mods stay locked.
  */
 static fsm_action fsm_press_latched[]={
 	status_press_latched, status_press,
-	status_release_latched, status_unlatch_all, status_update_view,
+	status_release_latched,
 	NULL
 };
 static fsm_action fsm_release_latched[]={ status_release, status_release_latched, status_unlatch_all, status_update_view, NULL };
@@ -78,7 +78,15 @@ static struct fsm_change fsm_mouse[FSM_EVENT_NUM][FSM_KEY_TYPE_NUM][KEY_STATE_NU
 		}
 	}, { /* RELEASE event */
 		{ /* NORMAL key */
-			{ KEY_PRESSED, fsm_release_latched }, /* PRESSED state */
+			/*
+			 * End RELEASED after release_latched. Stock left
+			 * KEY_PRESSED for XRecord sync; when the echo was
+			 * missing/ignored the key stayed PRESSED and the next
+			 * click recovered with an extra XTest cycle (double
+			 * letters / Esc / Fn media). Modifiers use their own
+			 * latch/lock path and were unaffected.
+			 */
+			{ KEY_RELEASED, fsm_release_latched }, /* PRESSED state */
 			{ KEY_RELEASED, NULL }, /* RELEASED state */
 		}, { /* MODIFIER key */
 			{ KEY_RELEASED, fsm_display_error }, /* PRESSED state */

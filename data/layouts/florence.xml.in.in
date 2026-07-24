@@ -532,87 +532,107 @@
 	<identifiant>standardfn</identifiant>
 	<placement>top</placement>
 	<keyboard>
-	<width>44</width>
-	<height>2</height>
+	<!--
+	  ~2/3 normal key height (h=1.33 vs normal h=2). Board height 2.08 leaves
+	  a gap above the number row. Origin aligns with chrome (view TOP x=-xoffset):
+	  Esc@1 above Close; F1–F4 above 1–4; F5–F8 above 6–9; gap above 0;
+	  F9/F10 above -/ =; F11/F12 above Backspace.
+	-->
+	<width>32</width>
+	<height>2.08</height>
 	<key>
 		<code>9</code>
+		<shape>tiny</shape>
 		<xpos>1</xpos>
-		<ypos>1</ypos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
+	<!-- gap above backtick (global xpos 3) -->
 	<key>
 		<code>67</code>
+		<shape>tiny</shape>
 		<xpos>5</xpos>
-		<ypos>1</ypos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
 	<key>
 		<code>68</code>
+		<shape>tiny</shape>
 		<xpos>7</xpos>
-		<ypos>1</ypos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
 	<key>
 		<code>69</code>
+		<shape>tiny</shape>
 		<xpos>9</xpos>
-		<ypos>1</ypos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
 	<key>
 		<code>70</code>
+		<shape>tiny</shape>
 		<xpos>11</xpos>
-		<ypos>1</ypos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
+	<!-- F5–F8 above 6–9; gap between F4 and F5 is above 5 -->
 	<key>
 		<code>71</code>
-		<xpos>14</xpos>
-		<ypos>1</ypos>
+		<shape>tiny</shape>
+		<xpos>15</xpos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
 	<key>
 		<code>72</code>
-		<xpos>16</xpos>
-		<ypos>1</ypos>
+		<shape>tiny</shape>
+		<xpos>17</xpos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
 	<key>
 		<code>73</code>
-		<xpos>18</xpos>
-		<ypos>1</ypos>
+		<shape>tiny</shape>
+		<xpos>19</xpos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
 	<key>
 		<code>74</code>
-		<xpos>20</xpos>
-		<ypos>1</ypos>
+		<shape>tiny</shape>
+		<xpos>21</xpos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
+	<!-- gap above 0 (global 23) -->
 	<key>
 		<code>75</code>
-		<xpos>23</xpos>
-		<ypos>1</ypos>
+		<shape>tiny</shape>
+		<xpos>25</xpos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
 	<key>
 		<code>76</code>
-		<xpos>25</xpos>
-		<ypos>1</ypos>
+		<shape>tiny</shape>
+		<xpos>27</xpos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
 	<key>
 		<code>95</code>
-		<xpos>27</xpos>
-		<ypos>1</ypos>
+		<shape>tiny</shape>
+		<xpos>29</xpos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
 	<key>
 		<code>96</code>
-		<xpos>29</xpos>
-		<ypos>1</ypos>
-	</key>
-	<key>
-		<code>107</code>
-		<xpos>39</xpos>
-		<ypos>1</ypos>
-	</key>
-	<key>
-		<code>78</code>
-		<xpos>41</xpos>
-		<ypos>1</ypos>
-	</key>
-	<key>
-		<code>127</code>
-		<xpos>43</xpos>
-		<ypos>1</ypos>
+		<shape>tiny</shape>
+		<xpos>31</xpos>
+		<ypos>0.665</ypos>
+		<height>1.33</height>
 	</key>
 	</keyboard>
 </extension>
@@ -624,10 +644,11 @@
 	<keyboard>
 	<width>2</width>
 	<height>10</height>
+	<!-- Esc is on the F-row above Close; chrome + Fn. -->
 	<key>
 		<action>reduce</action>
 		<modifier>
-			<code>8</code> <!-- alt -->
+			<code>8</code>
 			<action>close</action>
 		</modifier>
 		<xpos>1</xpos>
@@ -636,7 +657,7 @@
 	<key>
 		<action>config</action>
 		<modifier>
-			<code>8</code> <!-- alt -->
+			<code>8</code>
 			<action>switch</action>
 		</modifier>
 		<xpos>1</xpos>
@@ -651,6 +672,11 @@
 		<action>resize</action>
 		<xpos>1</xpos>
 		<ypos>7</ypos>
+	</key>
+	<key>
+		<action>fn</action>
+		<xpos>1</xpos>
+		<ypos>9</ypos>
 	</key>
 	</keyboard>
 </extension>

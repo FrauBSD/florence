@@ -77,7 +77,9 @@ struct status {
 	gboolean focus_zoom; /* zoom the focused key (if composite screen or mask is disabled) */
 	GTimer *timer; /* auto click timer: amount of time the mouse has been over the current key */
 	guint touch_id; /* GSourceId of the touch timeout */
+	struct key *touch_key; /* key the touch highlight timer will release */
 	struct key *pressed; /* key currently being pressed or NULL */
+	unsigned int xtest_echo_code; /* keycode of in-flight XTest press to ignore once */
 	GList *latched_keys; /* the list of all currently latched keys */
 	GList *locked_keys; /* the list of all currently locked keys */
 	GdkModifierType globalmod; /* global modifier mask */

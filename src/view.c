@@ -375,7 +375,15 @@ session_place_keyboard(struct view *view)
 	}
 	et = getenv("FLORENCE_TASKBAR_H");
 	taskbar = (et && atoi(et) > 0) ? atoi(et) : SESSION_TASKBAR_DEFAULT;
-	bottom_clear = margin + SESSION_GLYPH_H + SESSION_GLYPH_MARGIN + taskbar;
+	/*
+	 * Landscape: sit just above the taskbar (glyph is corner-only).
+	 * Portrait: also clear the float glyph so the OSK does not cover it.
+	 */
+	if (pw < ph)
+		bottom_clear = margin + SESSION_GLYPH_H + SESSION_GLYPH_MARGIN +
+		    taskbar;
+	else
+		bottom_clear = margin + taskbar;
 
 	session_fit_scale_for_panel(view, pw, ph, margin, taskbar);
 
@@ -848,7 +856,11 @@ void view_keyboards_set_pos(struct view *view, struct keyboard *over)
 					break;
 				case LAYOUT_TOP:
 					yoffset+=keyboard_get_height(keyboard);
-					x=0.0; y=-yoffset;
+					/*
+					 * Align with the leftmost chrome (actionkys), not
+					 * the main board, so Esc can sit above Close.
+					 */
+					x=-view->xoffset; y=-yoffset;
 					if (over) keyboard_set_under(keyboard); else keyboard_set_over(keyboard);
 					break;
 				case LAYOUT_BOTTOM:
@@ -910,6 +922,13 @@ void view_set_dimensions(struct view *view)
 					break;
 				case LAYOUT_RIGHT:
 					view->vwidth+=keyboard_get_width(keyboard);
+					/* Nav/numpad can be taller than the main board
+					 * (e.g. PrtSc row); grow the window so the
+					 * bottom arrow row is not clipped. */
+					if (view->yoffset + keyboard_get_height(keyboard) >
+					    view->vheight)
+						view->vheight = view->yoffset +
+						    keyboard_get_height(keyboard);
 					break;
 				case LAYOUT_OVER:
 					if (keyboard_get_width(keyboard)>view->vwidth) view->vwidth=keyboard_get_width(keyboard);

@@ -52,9 +52,17 @@ enum key_action_type {
 	KEY_EXTEND, /* argument = extension name */
 	KEY_UNEXTEND, /* argument = extension name */
 	KEY_RESIZE, /* Live-resize keyboard (drag; like MOVE) */
+	KEY_FN, /* Sticky Fn layer (latch/lock like Shift); not an X modifier */
 	KEY_UNKNOWN, /* unknown action */
 	KEY_NOP /* no action */
 };
+
+/*
+ * Synthetic Gdk mask for the on-screen Fn sticky layer. Must not collide with
+ * Shift/Ctrl/Alt/Super masks Florence already latches. Layout XML uses decimal
+ * 32 when referencing this bit on <modifier> (unused today — Fn remap is C).
+ */
+#define FLORENCE_FN_MASK ((GdkModifierType)GDK_MOD3_MASK)
 
 /* the key state, used in the FSM table */
 enum key_state {
@@ -105,6 +113,8 @@ struct key {
 	gdouble w, h; /* size of the key inside the keyboard */
 	void *keyboard; /* keyboard attached to the key */
 	enum key_state state; /* state of the key (pressed, released, latched or locked) */
+	/* Last XTest keycode pressed (Fn remap); release must match press. */
+	unsigned int xtest_code;
 };
 
 /* Instanciate a key

@@ -82,10 +82,24 @@ void status_record_event (XPointer priv, XRecordInterceptData *hook)
 	if (hook->category==XRecordFromServer) {
 		event=(xEvent *)hook->data;
 		if ((key=status->keys[event->u.u.detail])) {
-			if (event->u.u.type==KeyPress)
-				fsm_process(status, key, FSM_PRESSED);
-			else if (event->u.u.type==KeyRelease)
+			/*
+			 * Ignore one KeyPress echo of Florence's own XTest.
+			 * Always run KeyRelease so highlights clear for both
+			 * OSK and hardware typing.
+			 */
+			if (event->u.u.type==KeyPress) {
+				if (status->xtest_echo_code &&
+				    status->xtest_echo_code ==
+				    (unsigned int)event->u.u.detail) {
+					status->xtest_echo_code = 0;
+				} else
+					fsm_process(status, key, FSM_PRESSED);
+			} else if (event->u.u.type==KeyRelease) {
+				if (status->xtest_echo_code ==
+				    (unsigned int)event->u.u.detail)
+					status->xtest_echo_code = 0;
 				fsm_process(status, key, FSM_RELEASED);
+			}
 		}
 	}
 	if (hook) XRecordFreeData(hook);
@@ -297,10 +311,19 @@ gboolean status_touch_timer(gpointer data)
 {
 	START_FUNC
 	struct status *status=(struct status *)data;
-	if (status->pressed) {
-		key_state_set(status->pressed, KEY_RELEASED);
-		view_update(status->view, status->pressed, FALSE);
-		status->pressed=NULL;
+	struct key *key=status->touch_key;
+
+	/*
+	 * Always clear the key that armed the timer. Using status->pressed alone
+	 * left a prior F-key stuck PRESSED after another key was touched, which
+	 * made that Fn media key dead for the rest of the session.
+	 */
+	if (key) {
+		key_state_set(key, KEY_RELEASED);
+		if (status->view) view_update(status->view, key, FALSE);
+		if (status->pressed == key)
+			status->pressed=NULL;
+		status->touch_key=NULL;
 	}
 	status->touch_id=0;
 	END_FUNC
@@ -314,10 +337,25 @@ void status_press (struct status *status, struct key *key)
 	flo_debug(TRACE_DEBUG, _("sending press event"));
 	status->pressed = key;
 	key_press(key, status);
+	/* Remember keycode so XRecord can drop our own KeyPress echo once. */
+	if (key->xtest_code)
+		status->xtest_echo_code = key->xtest_code;
 #ifdef ENABLE_XRECORD
-	if (((struct key_mod *)(key->mods->data))->type==KEY_ACTION)
-#endif
+	{
+		struct key_mod *m=key->mods ? (struct key_mod *)(key->mods->data) : NULL;
+		gboolean synth=(!m || m->type==KEY_ACTION);
+
+		if (!synth && m && m->type==KEY_CODE) {
+			unsigned int native=((struct key_code *)m->data)->code;
+			if (key->xtest_code && key->xtest_code != native)
+				synth=TRUE;
+		}
+		if (synth)
+			fsm_process(status, key, FSM_PRESSED);
+	}
+#else
 	fsm_process(status, key, FSM_PRESSED);
+#endif
 #ifdef ENABLE_XRECORD
 	status_record_process(status);
 #endif
@@ -330,23 +368,11 @@ void status_release (struct status *status, struct key *key)
 	START_FUNC
 	flo_debug(TRACE_DEBUG, _("sending release event"));
 	key_release(key, status);
-#ifdef ENABLE_XRECORD
-	if (((struct key_mod *)(key->mods->data))->type==KEY_ACTION)
-#endif
+	/* Always complete Florence FSM release (do not wait on XRecord). */
 	fsm_process(status, key, FSM_RELEASED);
-	if (status_im_get(status)==STATUS_IM_TOUCH && (!key_get_modifier(key))) {
-		key_state_set(key, KEY_PRESSED);
-		view_update(status->view, key, FALSE);
-		if (status->touch_id) g_source_remove(status->touch_id);
-		status->touch_id=g_timeout_add(STATUS_TOUCH_TIMEOUT, status_touch_timer, status);
-	}
 #ifdef ENABLE_XRECORD
 	status_record_process(status);
 #endif
-	/*
-	 * Caps/Num: flush X so locked_mods matches the key we just sent, then
-	 * sync the green on/off indicator from XKB.
-	 */
 	if (key_is_locker(key) && status->view) {
 #ifdef ENABLE_XKB
 		XSync(gdk_x11_get_default_xdisplay(), False);
@@ -739,7 +765,7 @@ struct status *status_new(const gchar *focus_back)
 	status_record_start(status);
 	g_timeout_add(STATUS_EVENTCHECK_INTERVAL, status_record_process, (gpointer)status);
 #endif
-	status->spi=TRUE;
+	status->spi=FALSE; /* XTest only — ATSPI+XTest double-delivered keycodes */
 	if (focus_back) {
 		status->w_focus=status_find_window(focus_back);
 	}

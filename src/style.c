@@ -332,9 +332,22 @@ void style_symbol_draw(struct style *style, cairo_t *cairoctx, guint keyval, gdo
 	GSList *item=style->symbols;
 	gchar name[7];
 	guint keyval2=keyval;
+	const gchar *kvname=gdk_keyval_name(keyval);
 
-	while (item && !style_symbol_matches((struct symbol *)item->data, gdk_keyval_name(keyval))) {
+	while (item && !style_symbol_matches((struct symbol *)item->data, (gchar *)kvname)) {
 		item=g_slist_next(item);
+	}
+	/*
+	 * GDK returns AudioMute / Display / … for XF86* keyvals. Our symbols
+	 * are often stored under the XF86-prefixed name — try that next.
+	 */
+	if (!item && kvname && strncmp(kvname, "XF86", 4) != 0) {
+		gchar *xf86=g_strdup_printf("XF86%s", kvname);
+		item=style->symbols;
+		while (item && !style_symbol_matches((struct symbol *)item->data, xf86)) {
+			item=g_slist_next(item);
+		}
+		g_free(xf86);
 	}
 	/* No predifined symbol => get the label according to keyval */
 	if (!item) {
@@ -690,9 +703,22 @@ struct style *style_new(gchar *base_uri)
 	memset(style, 0, sizeof(struct style));
 	style->base_uri=base_uri;
 	if (!uri) uri=settings_get_string(SETTINGS_STYLE_ITEM);
-	layout=layoutreader_new(uri,
-		DATADIR "/styles/default/florence.style",
-		DATADIR "/relaxng/style.rng");
+	{
+		const char *rng=DATADIR "/relaxng/style.rng";
+		const char *home=getenv("HOME");
+		gchar *home_rng=NULL;
+
+		if (home) {
+			home_rng=g_strdup_printf(
+			    "%s/theme/florence/relaxng/style.rng", home);
+			if (g_file_test(home_rng, G_FILE_TEST_EXISTS))
+				rng=home_rng;
+		}
+		layout=layoutreader_new(uri,
+		    DATADIR "/styles/default/florence.style",
+		    (char *)rng);
+		if (home_rng) g_free(home_rng);
+	}
 
 	layoutreader_element_open(layout, "style");
 	if (layoutreader_element_open(layout, "shapes")) {

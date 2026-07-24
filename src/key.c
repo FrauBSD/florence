@@ -56,8 +56,45 @@ static const gchar *key_actions[] = {
 	"switch",
 	"extend",
 	"unextend",
-	"resize"
+	"resize",
+	"fn"
 };
+
+/*
+ * Fn-layer remaps (evdev keycodes). Matches Framework hardware Fn row and
+ * ~/.xbindkeysrc (volume-osd / brightness-osd / display-mirror / screenshot /
+ * audio-output-toggle).
+ */
+static unsigned int
+florence_fn_remap(unsigned int code)
+{
+	switch (code) {
+	case 67: return 121;	/* F1  → XF86AudioMute */
+	case 68: return 122;	/* F2  → XF86AudioLowerVolume */
+	case 69: return 123;	/* F3  → XF86AudioRaiseVolume */
+	case 73: return 232;	/* F7  → XF86MonBrightnessDown */
+	case 74: return 233;	/* F8  → XF86MonBrightnessUp */
+	case 75: return 235;	/* F9  → XF86Display (mirror) */
+	case 96: return 234;	/* F12 → XF86AudioMedia (audio-output-toggle/osd) */
+	default: return 0;
+	}
+}
+
+/* Symbol names for Fn-layer icons (GDK keyval names can vary by platform). */
+static const char *
+florence_fn_symbol_name(unsigned int fcode)
+{
+	switch (fcode) {
+	case 67: return "XF86AudioMute";
+	case 68: return "XF86AudioLowerVolume";
+	case 69: return "XF86AudioRaiseVolume";
+	case 73: return "XF86MonBrightnessDown";
+	case 74: return "XF86MonBrightnessUp";
+	case 75: return "XF86Display";
+	case 96: return "XF86AudioMedia";
+	default: return NULL;
+	}
+}
 
 /* Parse string into key type enumeration */
 enum key_action_type key_action_type_get(gchar *str)
@@ -278,15 +315,26 @@ void key_press(struct key *key, struct status *status)
 	START_FUNC
 	struct key_mod *mod=key_mod_find(key, status_globalmod_get(status));
 	struct key_action *action;
+	unsigned int code, remap;
+	GdkModifierType gmod;
+
 	if (mod) {
 		switch (mod->type) {
 			case KEY_CODE:
-				status->spi=key_event(((struct key_code *)mod->data)->code, TRUE, status->spi);
+				code = ((struct key_code *)mod->data)->code;
+				gmod = status_globalmod_get(status);
+				if (gmod & FLORENCE_FN_MASK) {
+					remap = florence_fn_remap(code);
+					if (remap)
+						code = remap;
+				}
+				key->xtest_code = code;
+				status->spi=key_event(code, TRUE, status->spi);
 				if (settings_get_bool(SETTINGS_SOUNDS) && status->view)
 					style_sound_play(status->view->style,
 						gdk_keyval_name(xkeyboard_getKeyval(status->xkeyboard,
-							((struct key_code *)mod->data)->code,
-							status_globalmod_get(status))),
+							code,
+							gmod & ~FLORENCE_FN_MASK)),
 						STYLE_SOUND_PRESS);
 				break;
 			case KEY_ACTION:
@@ -295,6 +343,9 @@ void key_press(struct key *key, struct status *status)
 					/* Always Florence live-move + seat grab (see florence.c). */
 					case KEY_MOVE: status_set_moving(status, TRUE); break;
 					case KEY_RESIZE: status_set_resizing(status, TRUE); break;
+					case KEY_FN:
+						/* Sticky layer only — no X event. */
+						break;
 					case KEY_BIGGER:
 					case KEY_SMALLER:
 					case KEY_CONFIG:
@@ -330,15 +381,34 @@ void key_release(struct key *key, struct status *status)
 	START_FUNC
 	struct key_mod *mod=key_mod_find(key, status_globalmod_get(status));
 	struct key_action *action;
+	unsigned int code, remap;
+	GdkModifierType gmod;
+
 	if (mod) {
 		switch (mod->type) {
 			case KEY_CODE:
-				status->spi=key_event(((struct key_code *)mod->data)->code, FALSE, status->spi);
+				/*
+				 * Match the press keycode. One-shot Fn unlatches
+				 * before release, so remapping again would miss.
+				 */
+				if (key->xtest_code) {
+					code = key->xtest_code;
+					key->xtest_code = 0;
+				} else {
+					code = ((struct key_code *)mod->data)->code;
+					gmod = status_globalmod_get(status);
+					if (gmod & FLORENCE_FN_MASK) {
+						remap = florence_fn_remap(code);
+						if (remap)
+							code = remap;
+					}
+				}
+				status->spi=key_event(code, FALSE, status->spi);
 				if (settings_get_bool(SETTINGS_SOUNDS) && status->view)
 					style_sound_play(status->view->style,
 						gdk_keyval_name(xkeyboard_getKeyval(status->xkeyboard,
-							((struct key_code *)mod->data)->code,
-							status_globalmod_get(status))),
+							code,
+							status_globalmod_get(status) & ~FLORENCE_FN_MASK)),
 						STYLE_SOUND_RELEASE);
 				break;
 			case KEY_ACTION:
@@ -350,6 +420,8 @@ void key_release(struct key *key, struct status *status)
 					case KEY_CONFIG: settings(); break;
 					case KEY_MOVE: status_set_moving(status, FALSE); break;
 					case KEY_RESIZE: status_set_resizing(status, FALSE); break;
+					case KEY_FN:
+						break;
 					/*
 					 * Stock bigger/smaller multiplied scale with no
 					 * bounds and notified GSettings on every click.
@@ -443,13 +515,32 @@ void key_symbol_draw(struct key *key, struct style *style,
 	}
 
 	switch (mod->type) {
-		case KEY_CODE:
-			style_symbol_draw(style, cairoctx,
-				xkeyboard_getKeyval(status->xkeyboard,
-					((struct key_code *)mod->data)->code,
-					status_globalmod_get(status)),
-				key->w, key->h);
+		case KEY_CODE: {
+			unsigned int code = ((struct key_code *)mod->data)->code;
+			GdkModifierType gmod = status_globalmod_get(status);
+			guint keyval = 0;
+			const char *fn_name;
+
+			if (gmod & FLORENCE_FN_MASK) {
+				fn_name = florence_fn_symbol_name(code);
+				if (fn_name) {
+					keyval = gdk_keyval_from_name(fn_name);
+					if (!keyval && !strncmp(fn_name, "XF86", 4))
+						keyval = gdk_keyval_from_name(fn_name + 4);
+				}
+				if (!keyval) {
+					unsigned int remap = florence_fn_remap(code);
+
+					if (remap)
+						code = remap;
+				}
+			}
+			if (!keyval)
+				keyval = xkeyboard_getKeyval(status->xkeyboard, code,
+				    gmod & ~FLORENCE_FN_MASK);
+			style_symbol_draw(style, cairoctx, keyval, key->w, key->h);
 			break;
+		}
 		case KEY_ACTION:
 			action=(struct key_action *)mod->data;
 			if (action->type==KEY_SWITCH)
@@ -536,9 +627,27 @@ gboolean key_is_locker(struct key *key) {
 void *key_get_keyboard(struct key *key) { return key->keyboard; }
 GdkModifierType key_get_modifier(struct key *key) {
 	START_FUNC
+	struct key_mod *mod;
+	struct key_action *action;
+
+	if (!key || !key->mods || !key->mods->data) {
+		END_FUNC
+		return 0;
+	}
+	mod = (struct key_mod *)key->mods->data;
+	if (mod->type == KEY_CODE) {
+		END_FUNC
+		return ((struct key_code *)mod->data)->modifier;
+	}
+	if (mod->type == KEY_ACTION) {
+		action = (struct key_action *)mod->data;
+		if (action && action->type == KEY_FN) {
+			END_FUNC
+			return FLORENCE_FN_MASK;
+		}
+	}
 	END_FUNC
-	return ((struct key_mod *)key->mods->data)->type==KEY_CODE?
-		((struct key_code *)((struct key_mod *)key->mods->data)->data)->modifier:0;
+	return 0;
 }
 
 /* return if key is it at position */
