@@ -30,6 +30,9 @@
 #ifdef ENABLE_HELP
 	#include <gdk/gdkkeysyms.h>
 #endif
+#include <gdk/gdkx.h>
+#include <X11/Xutil.h>
+#include <X11/Xatom.h>
 #include "settings.h"
 #include "trace.h"
 #include "layoutreader.h"
@@ -46,7 +49,11 @@
 #endif
 
 static struct settings_window *settings_window=NULL;
+/* TRUE while syncing widgets from settings — ignore widget→settings signals. */
+static gboolean settings_window_updating=FALSE;
 void settings_window_extension(GtkToggleButton *button, gchar *name);
+static gboolean settings_window_on_delete(GtkWidget *window, GdkEvent *event,
+	gpointer data);
 
 /*********************/
 /* private functions */
@@ -336,6 +343,7 @@ void settings_window_update()
 	gchar *val;
 #endif
 
+	settings_window_updating=TRUE;
 	while (params[searchidx].builder_name) {
 		if (strcmp(params[searchidx].builder_name, SETTINGS_NONE))
 			switch (params[searchidx].type) {
@@ -407,6 +415,7 @@ void settings_window_update()
 	       	g_free(color);
 	}
 
+	settings_window_updating=FALSE;
 	END_FUNC
 }
 
@@ -436,7 +445,9 @@ void settings_window_style_change (GtkIconView *iconview, gpointer user_data)
 	gchar *path;
 	gchar *name;
 	GtkTreeIter iter;
-	GList *list=gtk_icon_view_get_selected_items(iconview);
+	GList *list;
+	if (settings_window_updating) { END_FUNC; return; }
+	list=gtk_icon_view_get_selected_items(iconview);
 	if (list) {
 		gtk_tree_model_get_iter(gtk_icon_view_get_model(iconview), &iter, (GtkTreePath *)list->data);
 		gtk_tree_model_get(gtk_icon_view_get_model(iconview), &iter, 1, &name, -1);
@@ -455,7 +466,9 @@ void settings_window_change_color(GtkColorChooser *button)
 	START_FUNC
 	GdkRGBA color;
 	gchar strcolor[8];
-	enum settings_item item=settings_get_settings_name(GTK_WIDGET(button));
+	enum settings_item item;
+	if (settings_window_updating) { END_FUNC; return; }
+	item=settings_get_settings_name(GTK_WIDGET(button));
 	gtk_color_chooser_get_rgba(button, &color);
 	g_sprintf(strcolor, "#%02X%02X%02X", (int)((color.red)*256.),
 		(int)((color.green)*256.), (int)((color.blue)*256.));
@@ -473,6 +486,7 @@ void settings_window_combo(GtkComboBox *combo)
 	GtkTreeIter iter;
 	gchar *data=NULL;
 
+	if (settings_window_updating) { END_FUNC; return; }
 	gtk_combo_box_get_active_iter(combo, &iter);
 	model=gtk_combo_box_get_model(combo);
 	gtk_tree_model_get(model, &iter, 1, &data, -1);
@@ -497,6 +511,7 @@ void settings_window_extension(GtkToggleButton *button, gchar *name)
         gchar **newextstr=NULL;
 	gchar *new_value=NULL;
 
+	if (settings_window_updating) { END_FUNC; return; }
 	allextstr=settings_get_string(SETTINGS_EXTENSIONS);
 	if (allextstr) {
                 extstrs=g_strsplit(allextstr, ":", -1);
@@ -522,6 +537,7 @@ void settings_window_extension(GtkToggleButton *button, gchar *name)
 void settings_window_set_double(GtkHScale *scale)
 {
 	START_FUNC
+	if (settings_window_updating) { END_FUNC; return; }
 	settings_set_double(settings_get_settings_name(GTK_WIDGET(scale)),
 		gtk_range_get_value(GTK_RANGE(scale)), TRUE);
 	END_FUNC
@@ -531,6 +547,7 @@ void settings_window_set_double(GtkHScale *scale)
 void settings_window_font(GtkFontButton *font)
 {
 	START_FUNC
+	if (settings_window_updating) { END_FUNC; return; }
 	settings_set_string(SETTINGS_FONT, gtk_font_button_get_font_name(font));
 	END_FUNC
 }
@@ -540,6 +557,7 @@ void settings_window_font(GtkFontButton *font)
 void settings_window_set_bool (GtkToggleButton *button)
 {
 	START_FUNC
+	if (settings_window_updating) { END_FUNC; return; }
 #ifdef ENABLE_RAMBLE
 	if ((!strcmp(gtk_buildable_get_name(GTK_BUILDABLE(button)), "ramble_distance")) ||
 		(!strcmp(gtk_buildable_get_name(GTK_BUILDABLE(button)), "ramble_time"))) {
@@ -590,39 +608,241 @@ void settings_window_commit(GtkWidget *window, GtkWidget *button)
 	END_FUNC
 }
 
-/* discard changes. */
+/* Revert unapplied changes (does not close the dialog). */
 void settings_window_rollback(GtkWidget *window, GtkWidget *button)
 {
 	START_FUNC
+	(void)button;
 	settings_rollback();
 	if (window) settings_window_preview_build();
 	settings_window_update();
 	END_FUNC
 }
 
-/* Called when the 'close' button is pressed:
- * check changes and ask the user if they need commit or discard if any. */
+/* Apply / Discard / Cancel when closing with unapplied changes. */
+static gint
+settings_window_confirm_close(GtkWindow *parent)
+{
+	GtkWidget *dialog;
+	gint ret;
+
+	dialog = gtk_message_dialog_new(parent,
+		GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+		GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE,
+		_("You have unapplied changes."));
+	gtk_window_set_title(GTK_WINDOW(dialog), _("Confirm"));
+	gtk_dialog_add_buttons(GTK_DIALOG(dialog),
+		_("_Apply"), GTK_RESPONSE_ACCEPT,
+		_("_Discard"), GTK_RESPONSE_REJECT,
+		_("_Cancel"), GTK_RESPONSE_CANCEL,
+		NULL);
+	gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
+	ret = gtk_dialog_run(GTK_DIALOG(dialog));
+	gtk_widget_destroy(dialog);
+	return ret;
+}
+
+/* Tear down prefs; safe to call from Close, WM delete, or destroy. */
 void settings_window_close(GtkWidget *window, GtkWidget *button)
 {
 	START_FUNC
 	static gboolean closed=FALSE;
-	if (closed) return;
-	closed=TRUE;
-	if (settings_dirty()) {
-		if (GTK_RESPONSE_ACCEPT==tools_dialog(_("Confirm"), GTK_WINDOW(window),
-			_("Apply"), _("Cancel"), _("Discard changes?")))
-			settings_window_commit(NULL, NULL);
-		else settings_window_rollback(NULL, NULL);
+	GtkWidget *win;
+	gboolean do_exit;
+
+	(void)button;
+	if (closed || !settings_window) {
+		END_FUNC
+		return;
 	}
-	if (settings_window->notify_id>0) settings_unregister(settings_window->notify_id);
+	closed=TRUE;
+
+	win = window;
+	if ((!win || !GTK_IS_WIDGET(win)) && settings_window->gtkbuilder)
+		win = GTK_WIDGET(gtk_builder_get_object(settings_window->gtkbuilder,
+			"flo_config_window"));
+
+	if (settings_dirty() && win && GTK_IS_WINDOW(win)) {
+		gint resp = settings_window_confirm_close(GTK_WINDOW(win));
+		if (resp == GTK_RESPONSE_CANCEL || resp == GTK_RESPONSE_DELETE_EVENT) {
+			closed=FALSE;
+			END_FUNC
+			return;
+		}
+		if (resp == GTK_RESPONSE_ACCEPT)
+			settings_window_commit(NULL, NULL);
+		else
+			settings_window_rollback(NULL, NULL);
+	}
+	if (settings_window->notify_id>0)
+		settings_unregister(settings_window->notify_id);
 	settings_window->notify_id=0;
 
-	if (settings_window->style_list) g_object_unref(G_OBJECT(settings_window->style_list)); 
-	settings_window->style_list=NULL;
-	if (window) gtk_widget_destroy(GTK_WIDGET(window));
-	if (settings_window->gtk_exit) exit(0);
+	if (settings_window->style_list) {
+		g_object_unref(G_OBJECT(settings_window->style_list));
+		settings_window->style_list=NULL;
+	}
+
+	/* Only config-only mode (florence --settings) should quit the process. */
+	do_exit = settings_window->gtk_exit;
+
+	if (win && GTK_IS_WIDGET(win)) {
+		/* Prevent glade destroy→close re-entry from double-freeing. */
+		g_signal_handlers_disconnect_by_func(win,
+			G_CALLBACK(settings_window_close), win);
+		g_signal_handlers_disconnect_by_func(win,
+			G_CALLBACK(settings_window_on_delete), NULL);
+		gtk_widget_hide(win);
+		gtk_widget_destroy(win);
+	}
+
+	settings_window_free();
 	closed=FALSE;
+	if (do_exit) exit(0);
 	END_FUNC
+}
+
+/* WM titlebar close / Alt-F4 */
+static gboolean
+settings_window_on_delete(GtkWidget *window, GdkEvent *event, gpointer data)
+{
+	(void)event;
+	(void)data;
+	settings_window_close(window, NULL);
+	return TRUE; /* we destroy in close */
+}
+
+/* Locate the visible OSK (not the float glyph, not prefs). */
+static gboolean
+settings_window_find_osk(gint *ox, gint *oy, gint *ow, gint *oh)
+{
+	Display *dpy;
+	Window root;
+	Atom net_list, type;
+	int format;
+	unsigned long nitems, bytes;
+	unsigned char *data = NULL;
+	Window *wins;
+	unsigned long i;
+	gboolean found = FALSE;
+
+	dpy = GDK_DISPLAY_XDISPLAY(gdk_display_get_default());
+	root = DefaultRootWindow(dpy);
+	net_list = XInternAtom(dpy, "_NET_CLIENT_LIST", False);
+	if (XGetWindowProperty(dpy, root, net_list, 0, 1024, False, XA_WINDOW,
+		&type, &format, &nitems, &bytes, &data) != Success || !data)
+		return FALSE;
+	wins = (Window *)data;
+	for (i = 0; i < nitems; i++) {
+		XClassHint hint;
+		XWindowAttributes wa;
+		Window child;
+		int x, y;
+		gboolean is_flo, is_prefs;
+
+		memset(&hint, 0, sizeof(hint));
+		if (!XGetClassHint(dpy, wins[i], &hint))
+			continue;
+		is_flo = (hint.res_class &&
+			(!g_ascii_strcasecmp(hint.res_class, "Florence") ||
+			 !g_ascii_strcasecmp(hint.res_class, "florence"))) ||
+			(hint.res_name &&
+			 (!g_ascii_strcasecmp(hint.res_name, "florence") ||
+			  !g_ascii_strcasecmp(hint.res_name, "florence-sticky")));
+		is_prefs = (hint.res_class && strstr(hint.res_class, "refs")) ||
+			(hint.res_name && strstr(hint.res_name, "refs"));
+		if (hint.res_name) XFree(hint.res_name);
+		if (hint.res_class) XFree(hint.res_class);
+		if (!is_flo || is_prefs)
+			continue;
+		if (!XGetWindowAttributes(dpy, wins[i], &wa) ||
+		    wa.map_state != IsViewable)
+			continue;
+		/* Float glyph is ~64×44; keyboard is much larger. */
+		if (wa.width < 200 || wa.height < 120)
+			continue;
+		XTranslateCoordinates(dpy, wins[i], root, 0, 0, &x, &y, &child);
+		*ox = x; *oy = y; *ow = wa.width; *oh = wa.height;
+		found = TRUE;
+		break;
+	}
+	XFree(data);
+	return found;
+}
+
+/*
+ * Place prefs in free monitor space so the StaysOnTop keyboard does not
+ * cover it. Prefer the band above the OSK (typical bottom dock layout).
+ */
+static void
+settings_window_place_clear_of_keyboard(GtkWindow *prefs)
+{
+	GdkDisplay *disp;
+	GdkMonitor *mon;
+	GdkRectangle work;
+	gint pw, ph, px, py;
+	gint ox, oy, ow, oh;
+	gint above, below, left, right;
+	const gint gap = 24;
+
+	gtk_window_set_position(prefs, GTK_WIN_POS_NONE);
+	gtk_window_get_size(prefs, &pw, &ph);
+	if (pw < 1) pw = 350;
+	if (ph < 1) ph = 300;
+	/* Title/border roughly; keep clear of the OSK either way. */
+	ph += 40;
+
+	disp = gtk_widget_get_display(GTK_WIDGET(prefs));
+	if (!settings_window_find_osk(&ox, &oy, &ow, &oh)) {
+		mon = gdk_display_get_primary_monitor(disp);
+		if (!mon) mon = gdk_display_get_monitor(disp, 0);
+		if (!mon) return;
+		gdk_monitor_get_workarea(mon, &work);
+		px = work.x + (work.width - pw) / 2;
+		py = work.y + gap;
+		gtk_window_move(prefs, px, py);
+		gtk_window_present(prefs);
+		return;
+	}
+
+	mon = gdk_display_get_monitor_at_point(disp, ox + ow / 2, oy + oh / 2);
+	if (!mon) mon = gdk_display_get_primary_monitor(disp);
+	if (!mon) return;
+	gdk_monitor_get_workarea(mon, &work);
+
+	above = oy - work.y;
+	below = (work.y + work.height) - (oy + oh);
+	left = ox - work.x;
+	right = (work.x + work.width) - (ox + ow);
+
+	if (above >= ph + gap) {
+		px = work.x + (work.width - pw) / 2;
+		py = oy - ph - gap;
+		if (py < work.y + gap) py = work.y + gap;
+	} else if (below >= ph + gap) {
+		px = work.x + (work.width - pw) / 2;
+		py = oy + oh + gap;
+	} else if (left >= pw + gap) {
+		px = ox - pw - gap;
+		py = work.y + (work.height - ph) / 2;
+	} else if (right >= pw + gap) {
+		px = ox + ow + gap;
+		py = work.y + (work.height - ph) / 2;
+	} else {
+		/* No full clear band: pin to top of workarea (least OSK overlap). */
+		px = work.x + (work.width - pw) / 2;
+		py = work.y + gap;
+	}
+	if (px < work.x) px = work.x + gap;
+	if (py < work.y) py = work.y + gap;
+	if (px + pw > work.x + work.width)
+		px = work.x + work.width - pw - gap;
+	if (py + ph > work.y + work.height)
+		py = work.y + work.height - ph - gap;
+
+	gtk_window_move(prefs, px, py);
+	gtk_window_set_keep_above(prefs, TRUE);
+	gtk_window_present(prefs);
 }
 
 /********************/
@@ -633,16 +853,37 @@ void settings_window_close(GtkWidget *window, GtkWidget *button)
 gboolean settings_window_open(void)
 {
 	START_FUNC
+	GtkWidget *cfg;
+
+	if (!settings_window || settings_window->notify_id == 0) {
+		END_FUNC
+		return FALSE;
+	}
+	cfg = GTK_WIDGET(gtk_builder_get_object(settings_window->gtkbuilder,
+		"flo_config_window"));
+	/* Stale after a WM destroy that bypassed our close cleanup. */
+	if (!cfg || !GTK_IS_WINDOW(cfg)) {
+		settings_window_free();
+		END_FUNC
+		return FALSE;
+	}
 	END_FUNC
-	return (settings_window && (settings_window->notify_id!=0));
+	return TRUE;
 }
 
 /* presents the settings window to the user */
 void settings_window_present(void)
 {
 	START_FUNC
-	gtk_window_present(GTK_WINDOW(gtk_builder_get_object(settings_window->gtkbuilder,
-		"flo_config_window")));
+	GtkWidget *cfg;
+
+	if (!settings_window_open()) {
+		END_FUNC
+		return;
+	}
+	cfg = GTK_WIDGET(gtk_builder_get_object(settings_window->gtkbuilder,
+		"flo_config_window"));
+	settings_window_place_clear_of_keyboard(GTK_WINDOW(cfg));
 	END_FUNC
 }
 
@@ -651,6 +892,12 @@ void settings_window_new(gboolean exit)
 {
 	START_FUNC
 	GError* error = NULL;
+	GtkWidget *cfg;
+	GdkWindow *gdkw;
+	XClassHint ch;
+
+	if (settings_window)
+		settings_window_free();
 	settings_window=g_malloc(sizeof(struct settings_window));
 	memset(settings_window, 0, sizeof(struct settings_window));
 
@@ -660,6 +907,37 @@ void settings_window_new(gboolean exit)
 	{
 		flo_warn(_("Couldn't load builder file: %s"), error->message);
 		g_error_free(error);
+	}
+
+	cfg = GTK_WIDGET(gtk_builder_get_object(settings_window->gtkbuilder,
+		"flo_config_window"));
+	/*
+	 * Glade marks the window visible; hide immediately and set a distinct
+	 * WM_CLASS before remap so FVWM OSK styles (NeverFocus/NoTitle) do not
+	 * apply — otherwise prefs cannot be focused, closed, or dismissed.
+	 */
+	gtk_widget_hide(cfg);
+	gtk_window_set_role(GTK_WINDOW(cfg), "preferences");
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+	gtk_window_set_wmclass(GTK_WINDOW(cfg), "florence-prefs", "Florence-prefs");
+	G_GNUC_END_IGNORE_DEPRECATIONS
+	gtk_window_set_accept_focus(GTK_WINDOW(cfg), TRUE);
+
+	/*
+	 * Upstream stock button is gtk-cancel but only reverts — it does not
+	 * dismiss. Relabel so it matches behaviour (Close dismisses).
+	 */
+	{
+		GtkWidget *revert = GTK_WIDGET(gtk_builder_get_object(
+			settings_window->gtkbuilder, "flo_config_rollback"));
+		if (revert) {
+			G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+			gtk_button_set_use_stock(GTK_BUTTON(revert), FALSE);
+			G_GNUC_END_IGNORE_DEPRECATIONS
+			gtk_button_set_label(GTK_BUTTON(revert), _("Revert"));
+			gtk_widget_set_tooltip_text(revert,
+				_("Revert unapplied changes"));
+		}
 	}
 
 	/* populate fields*/
@@ -679,11 +957,37 @@ void settings_window_new(gboolean exit)
 		(settings_callback)settings_window_update);
 	settings_transaction();
 
+	/*
+	 * gtk_builder_connect_signals needs the executable linked with
+	 * -rdynamic / --export-dynamic. Also wire Close/delete ourselves so
+	 * dismiss always works even if builder lookup fails.
+	 */
 	gtk_builder_connect_signals(settings_window->gtkbuilder, NULL);
+	{
+		GtkWidget *close_btn = GTK_WIDGET(gtk_builder_get_object(
+			settings_window->gtkbuilder, "flo_close"));
+		g_signal_connect(G_OBJECT(cfg), "delete-event",
+			G_CALLBACK(settings_window_on_delete), NULL);
+		g_signal_connect_swapped(G_OBJECT(cfg), "destroy",
+			G_CALLBACK(settings_window_close), cfg);
+		if (close_btn)
+			g_signal_connect_swapped(G_OBJECT(close_btn), "clicked",
+				G_CALLBACK(settings_window_close), cfg);
+	}
 
 	/* set window icon */
-	tools_set_icon(GTK_WINDOW(gtk_builder_get_object(settings_window->gtkbuilder,
-		"flo_config_window")));
+	tools_set_icon(GTK_WINDOW(cfg));
+
+	gtk_widget_realize(cfg);
+	gdkw = gtk_widget_get_window(cfg);
+	if (gdkw && GDK_IS_X11_WINDOW(gdkw)) {
+		ch.res_name = (char *)"florence-prefs";
+		ch.res_class = (char *)"Florence-prefs";
+		XSetClassHint(GDK_WINDOW_XDISPLAY(gdkw), GDK_WINDOW_XID(gdkw), &ch);
+	}
+	gtk_widget_show_all(cfg);
+	gtk_window_resize(GTK_WINDOW(cfg), 350, 300);
+	settings_window_place_clear_of_keyboard(GTK_WINDOW(cfg));
 	END_FUNC
 }
 
@@ -699,7 +1003,8 @@ void settings_window_free()
 		}
 		if (settings_window->extensions) g_slist_free(settings_window->extensions);
 		if (settings_window->gtkbuilder) g_object_unref(G_OBJECT(settings_window->gtkbuilder));
-		if (settings_window) g_free(settings_window);
+		g_free(settings_window);
+		settings_window=NULL;
 	}
 	END_FUNC
 }
