@@ -15,6 +15,7 @@ florence_CPPFLAGS = -I$(top_srcdir) -DICONDIR="\"$(ICONDIR)\""\
    -DFLORENCELOCALEDIR=\""$(florencelocaledir)"\"\
    -DDATADIR="\"$(datadir)/florence\"" $(DEPS_CFLAGS) $(GTK3_CFLAGS)\
    $(LIBGNOME_CFLAGS) $(LIBNOTIFY_CFLAGS) $(XTST_CFLAGS) $(AT_SPI2_CFLAGS) $(INCLUDES)
+florence_LDFLAGS = -Wl,--export-dynamic
 florence_LDADD = $(DEPS_LIBS) $(LIBM) $(X11_LIBS) $(LIBGNOME_LIBS) $(LIBNOTIFY_LIBS)\
    $(XTST_LIBS) $(AT_SPI2_LIBS) $(GTK3_LIBS) -lflorence-1.0
 

@@ -72,7 +72,7 @@ onhide-element = element onhide {
 }
 
 action-element = element action {
-	"close" | "reduce" | "config" | "move" | "bigger" | "smaller" | "switch" |
+	"close" | "reduce" | "config" | "move" | "resize" | "fn" | "bigger" | "smaller" | "switch" |
 	( command-element, element argument { xsd:string } )
 }
 
