@@ -1,4 +1,4 @@
-AC_INIT([Florence virtual keyboard], [0.6.3], [f.agrech@gmail.com], [florence])
+AC_INIT([Florence virtual keyboard], [0.7.0], [dteske@FreeBSD.org], [florence])
 AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE(no-dist-gzip dist-bzip2)
 LT_INIT

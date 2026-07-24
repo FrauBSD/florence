@@ -1,3 +1,21 @@
+Continuation release — FrauBSD / FreeBSD maintenance of Florence after
+the SourceForge tree stalled at 0.6.3 (2014).
+
+Changelog:
+
+2026-07-23 Devin Teske <dteske@FreeBSD.org>
+	* Version 0.7.0
+	* Canonical tree moved to https://github.com/FrauBSD/florence
+	* Fix magnifier +/− crash (clamp scale; drop bigger/smaller from
+	  default layouts); Resize key with clamped live scale
+	* iPad-style sticky modifiers, Caps/Num lock sync, hold-to-repeat
+	* Move: WM drag (mouse) vs seat-grab (touch)
+	* Session placement above taskbar; RandR portrait fit / landscape
+	  restore
+	* Framework-style Fn row (⅔-height F-keys, Esc placement, KEY_FN)
+	* Unified greeter binary (--greeter / argv0); prefs Close /
+	  --export-dynamic and related dialog fixes
+
 Bug fix release
 
 Changelog:
