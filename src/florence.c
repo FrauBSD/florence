@@ -203,6 +203,8 @@ gboolean flo_button_press_event (GtkWidget *window, GdkEventButton *event, gpoin
 
 			florence->xpos = (gint)event->x;
 			florence->ypos = (gint)event->y;
+			florence->status->move_press_root_x = (gint)event->x_root;
+			florence->status->move_press_root_y = (gint)event->y_root;
 			status_set_moving(florence->status, TRUE);
 			gdkw = gtk_widget_get_window(window);
 			seat = gdk_display_get_default_seat(gdk_display_get_default());
@@ -334,6 +336,9 @@ gboolean flo_mouse_move_event(GtkWidget *window, GdkEvent *event, gpointer user_
 #endif
 	struct florence *florence=(struct florence *)user_data;
 	if (status_get_moving(florence->status)) {
+		gint dx, dy;
+		gint slop = 8;
+
 		/* Prefer event coords (reliable under seat grab / multi-device). */
 		if (event && event->type == GDK_MOTION_NOTIFY) {
 			x = (gint)((GdkEventMotion *)event)->x_root;
@@ -342,6 +347,19 @@ gboolean flo_mouse_move_event(GtkWidget *window, GdkEvent *event, gpointer user_
 			gdk_device_get_position(gdk_device_manager_get_client_pointer(
 				gdk_display_get_device_manager(gdk_display_get_default())),
 				NULL, &x, &y);
+		}
+		/*
+		 * Click vs drag: ignore motion inside slop so a single click
+		 * can restore the default open position on release.
+		 */
+		dx = x - florence->status->move_press_root_x;
+		dy = y - florence->status->move_press_root_y;
+		if (!florence->status->move_dragged) {
+			if (dx > -slop && dx < slop && dy > -slop && dy < slop) {
+				END_FUNC
+				return FALSE;
+			}
+			florence->status->move_dragged = TRUE;
 		}
 		gtk_window_move(GTK_WINDOW(window), x-florence->xpos, y-florence->ypos);
 	} else if (status_get_resizing(florence->status)) {

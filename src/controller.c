@@ -25,13 +25,198 @@
 #include "tools.h"
 #include "lib/florence.h"
 #include <cairo-xlib.h>
+#include <stdlib.h>
+#include <string.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/extensions/shape.h>
+#include <X11/extensions/Xrandr.h>
+#include <gdk/gdkx.h>
 
 #define MOVING_THRESHOLD 15
 
+/* Match fvwm-florence glyph well (taskbar + margin). */
+#define SESSION_ICON_W 64
+#define SESSION_ICON_H 44
+#define SESSION_ICON_MARGIN 20
+#define SESSION_TASKBAR_H 40
+
 RsvgHandle *handle;
+
+#ifndef FLORENCE_GREETER
+static guint session_icon_debounce_id;
+
+static int
+session_ctl_name_is_internal(const char *name)
+{
+
+	if (name == NULL)
+		return (0);
+	if (strncmp(name, "eDP", 3) == 0)
+		return (1);
+	if (strncmp(name, "LVDS", 4) == 0)
+		return (1);
+	if (strncmp(name, "DSI", 3) == 0)
+		return (1);
+	return (0);
+}
+
+static int
+session_ctl_panel_xrandr(gint *px, gint *py, gint *pw, gint *ph)
+{
+	Display *xdpy;
+	Window root;
+	XRRScreenResources *res;
+	XRROutputInfo *oi;
+	XRRCrtcInfo *ci;
+	int i;
+	int fx = 0, fy = 0, fw = 0, fh = 0;
+	int pox = 0, poy = 0, pow = 0, poh = 0;
+	int have_first = 0, have_pri = 0;
+	RROutput primary;
+
+	xdpy = gdk_x11_get_default_xdisplay();
+	if (!xdpy)
+		return (0);
+	root = DefaultRootWindow(xdpy);
+	res = XRRGetScreenResourcesCurrent(xdpy, root);
+	if (!res)
+		return (0);
+	primary = XRRGetOutputPrimary(xdpy, root);
+
+	for (i = 0; i < res->noutput; i++) {
+		oi = XRRGetOutputInfo(xdpy, res, res->outputs[i]);
+		if (!oi)
+			continue;
+		if (oi->connection != RR_Connected || oi->crtc == None) {
+			XRRFreeOutputInfo(oi);
+			continue;
+		}
+		ci = XRRGetCrtcInfo(xdpy, res, oi->crtc);
+		if (!ci || ci->mode == None) {
+			if (ci)
+				XRRFreeCrtcInfo(ci);
+			XRRFreeOutputInfo(oi);
+			continue;
+		}
+		if (session_ctl_name_is_internal(oi->name)) {
+			*px = ci->x;
+			*py = ci->y;
+			*pw = (gint)ci->width;
+			*ph = (gint)ci->height;
+			XRRFreeCrtcInfo(ci);
+			XRRFreeOutputInfo(oi);
+			XRRFreeScreenResources(res);
+			return (*pw > 0 && *ph > 0);
+		}
+		if (!have_first) {
+			fx = ci->x;
+			fy = ci->y;
+			fw = (int)ci->width;
+			fh = (int)ci->height;
+			have_first = 1;
+		}
+		if (!have_pri && primary == res->outputs[i]) {
+			pox = ci->x;
+			poy = ci->y;
+			pow = (int)ci->width;
+			poh = (int)ci->height;
+			have_pri = 1;
+		}
+		XRRFreeCrtcInfo(ci);
+		XRRFreeOutputInfo(oi);
+	}
+	XRRFreeScreenResources(res);
+	if (have_pri && pow > 0 && poh > 0) {
+		*px = pox;
+		*py = poy;
+		*pw = pow;
+		*ph = poh;
+		return (1);
+	}
+	if (have_first && fw > 0 && fh > 0) {
+		*px = fx;
+		*py = fy;
+		*pw = fw;
+		*ph = fh;
+		return (1);
+	}
+	return (0);
+}
+
+static void
+session_ctl_icon_xy(gint *ix, gint *iy)
+{
+	const char *et;
+	gint px, py, pw, ph, taskbar;
+
+	if (!session_ctl_panel_xrandr(&px, &py, &pw, &ph)) {
+		*ix = settings_get_int(SETTINGS_CONTROLLER_ICON_XPOS);
+		*iy = settings_get_int(SETTINGS_CONTROLLER_ICON_YPOS);
+		return;
+	}
+	et = getenv("FLORENCE_TASKBAR_H");
+	taskbar = (et && atoi(et) > 0) ? atoi(et) : SESSION_TASKBAR_H;
+	*ix = px + pw - SESSION_ICON_W - SESSION_ICON_MARGIN;
+	*iy = py + ph - taskbar - SESSION_ICON_H - SESSION_ICON_MARGIN;
+	if (*ix < px)
+		*ix = px;
+	if (*iy < py)
+		*iy = py;
+}
+
+static void
+session_ctl_place_icon(struct controller *controller)
+{
+	gint ix, iy;
+
+	if (!controller || !controller->controller_icon)
+		return;
+	session_ctl_icon_xy(&ix, &iy);
+	/* gtk move only — do not settings_set (keyfile rewrite). */
+	gtk_window_move(GTK_WINDOW(controller->controller_icon), ix, iy);
+}
+
+static gboolean
+session_ctl_monitors_idle(gpointer data)
+{
+	struct controller *controller = (struct controller *)data;
+
+	session_icon_debounce_id = 0;
+	session_ctl_place_icon(controller);
+	return FALSE;
+}
+
+static void
+session_ctl_on_monitors_changed(GdkScreen *screen, gpointer data)
+{
+	struct controller *controller = (struct controller *)data;
+
+	(void)screen;
+	if (session_icon_debounce_id)
+		g_source_remove(session_icon_debounce_id);
+	session_icon_debounce_id = g_timeout_add(300,
+	    session_ctl_monitors_idle, controller);
+}
+
+static void
+session_ctl_watch_monitors(struct controller *controller)
+{
+	GdkScreen *screen;
+
+	if (!controller)
+		return;
+	screen = gdk_screen_get_default();
+	if (!screen)
+		return;
+	g_signal_handlers_disconnect_by_func(screen,
+	    G_CALLBACK(session_ctl_on_monitors_changed), controller);
+	g_signal_connect(screen, "monitors-changed",
+	    G_CALLBACK(session_ctl_on_monitors_changed), controller);
+	g_signal_connect(screen, "size-changed",
+	    G_CALLBACK(session_ctl_on_monitors_changed), controller);
+}
+#endif
 
 /* on expose event: display florence icon */
 void controller_icon_expose (GtkWidget *window, cairo_t* context, void *userdata)
@@ -402,6 +587,10 @@ struct controller *controller_new(guint debounce)
 	settings_changecb_register(SETTINGS_CONTROLLER_FLOATICON, controller_on_float_icon_change, controller);
 	controller_float_icon(controller);
 	florence_register(FLORENCE_TERMINATE, controller_terminate, controller);
+#ifndef FLORENCE_GREETER
+	session_ctl_place_icon(controller);
+	session_ctl_watch_monitors(controller);
+#endif
 
 	END_FUNC
 	return controller;

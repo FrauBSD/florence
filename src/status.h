@@ -85,6 +85,10 @@ struct status {
 	gboolean spi; /* tell if spi events are enabled */
 	gboolean moving; /* true when moving key is pressed */
 	gboolean move_grabbed; /* seat grab held for live-move */
+	gboolean move_dragged; /* TRUE once pointer moves past click-slop */
+	gboolean move_launch_valid; /* move_launch_* captured */
+	gint move_launch_x, move_launch_y; /* open position at cold start / place */
+	gint move_press_root_x, move_press_root_y; /* root pointer at move press */
 	gboolean resizing; /* true when resize key is pressed (live scale) */
 	gboolean resize_grabbed; /* seat grab held for live-resize */
 	gboolean resize_dragged; /* TRUE once pointer moves past click-slop */

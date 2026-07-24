@@ -265,13 +265,18 @@ void status_update_view (struct status *status, struct key *key)
 {
 	START_FUNC
 	/*
-	 * Never pass statechange=TRUE here: that destroys the symbols surface
-	 * and redraws the whole keyboard. Caps/Num XKB sync and sticky-mod
-	 * latch used key_get_modifier() as the flag, which flickered hover
-	 * every few seconds. Press/latch colours are redrawn via view_update
-	 * invalidate + expose.
+	 * Stock Florence: view_update(..., key_get_modifier(key)).
+	 * Non-zero modifiers (Shift, AltGr, Caps, …) rebuild the symbols
+	 * surface so labels switch to capitals / shifted punctuation.
+	 *
+	 * A later anti-flicker change forced FALSE always, which left Shift
+	 * visually latched but still showing lowercase. Periodic XKB LED
+	 * sync no longer full-redraws (view_on_keys_changed), so restoring
+	 * the modifier flag is safe.
 	 */
-	if (status->view) view_update(status->view, key, FALSE);
+	if (status->view)
+		view_update(status->view, key,
+		    key && key_get_modifier(key) ? TRUE : FALSE);
 	END_FUNC
 }
 
@@ -815,7 +820,8 @@ void status_spi_disable(struct status *status)
 /* tell if spi is enabled */
 gboolean status_spi_is_enabled(struct status *status) { return status->spi; }
 
-/* set/get moving status (always Florence live-move + seat grab). */
+/* set/get moving status (always Florence live-move + seat grab).
+ * Click (no drag past slop): restore default open position. */
 void status_set_moving(struct status *status, gboolean moving)
 {
 	START_FUNC
@@ -823,6 +829,7 @@ void status_set_moving(struct status *status, gboolean moving)
 
 	if (moving) {
 		if (!status->moving) {
+			status->move_dragged=FALSE;
 			win=view_window_get(status->view);
 			if (win)
 				gtk_window_set_gravity(win, GDK_GRAVITY_STATIC);
@@ -836,6 +843,8 @@ void status_set_moving(struct status *status, gboolean moving)
 			if (seat) gdk_seat_ungrab(seat);
 			status->move_grabbed=FALSE;
 		}
+		if (!status->move_dragged && status->view)
+			view_restore_open_position(status->view);
 		win=view_window_get(status->view);
 		if (win)
 			gtk_window_set_gravity(win, GDK_GRAVITY_NORTH_WEST);

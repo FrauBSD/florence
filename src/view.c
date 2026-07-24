@@ -40,6 +40,98 @@
 #include <X11/XKBlib.h>
 #endif
 
+#ifndef FLORENCE_GREETER
+/*
+ * Session default open position: same as greeter (center on built-in panel,
+ * one cursor-height above the panel bottom), then raised by the FVWM
+ * taskbar height so the keyboard sits above the Start bar.
+ */
+static int
+session_builtin_panel(gint *px, gint *py, gint *pw, gint *ph)
+{
+	const char *ex, *ey, *ew, *eh;
+	GdkDisplay *dpy;
+	GdkRectangle geo;
+	GdkMonitor *m;
+
+	ex = getenv("FLORENCE_PANEL_X");
+	ey = getenv("FLORENCE_PANEL_Y");
+	ew = getenv("FLORENCE_PANEL_W");
+	eh = getenv("FLORENCE_PANEL_H");
+	if (ex && ey && ew && eh) {
+		*px = atoi(ex);
+		*py = atoi(ey);
+		*pw = atoi(ew);
+		*ph = atoi(eh);
+		if (*pw > 0 && *ph > 0)
+			return (1);
+	}
+
+	dpy = gdk_display_get_default();
+	if (!dpy)
+		return (0);
+	m = gdk_display_get_primary_monitor(dpy);
+	if (!m && gdk_display_get_n_monitors(dpy) > 0)
+		m = gdk_display_get_monitor(dpy, 0);
+	if (!m)
+		return (0);
+	gdk_monitor_get_geometry(m, &geo);
+	*px = geo.x;
+	*py = geo.y;
+	*pw = geo.width;
+	*ph = geo.height;
+	return (1);
+}
+
+static void
+session_place_keyboard(struct view *view)
+{
+	GdkDisplay *dpy;
+	const char *em, *et;
+	gint px, py, pw, ph, ww, wh, margin, taskbar, x, y;
+
+	if (!view || !view->window)
+		return;
+	dpy = gtk_widget_get_display(GTK_WIDGET(view->window));
+	if (!session_builtin_panel(&px, &py, &pw, &ph)) {
+		px = 0;
+		py = 0;
+		pw = gdk_screen_get_width(gdk_screen_get_default());
+		ph = gdk_screen_get_height(gdk_screen_get_default());
+	}
+	ww = (gint)view->width;
+	wh = (gint)view->height;
+	if (ww < 1 || wh < 1)
+		gtk_window_get_size(view->window, &ww, &wh);
+
+	em = getenv("FLORENCE_PLACE_MARGIN");
+	if (em && atoi(em) > 0)
+		margin = atoi(em);
+	else {
+		margin = (gint)gdk_display_get_default_cursor_size(dpy);
+		if (margin < 16)
+			margin = 24;
+	}
+	et = getenv("FLORENCE_TASKBAR_H");
+	taskbar = (et && atoi(et) > 0) ? atoi(et) : 40;
+
+	x = px + (pw - ww) / 2;
+	y = py + ph - wh - margin - taskbar;
+	if (x < px)
+		x = px;
+	if (y < py)
+		y = py;
+	gtk_window_move(view->window, x, y);
+	settings_set_int(SETTINGS_XPOS, x);
+	settings_set_int(SETTINGS_YPOS, y);
+	if (view->status) {
+		view->status->move_launch_x = x;
+		view->status->move_launch_y = y;
+		view->status->move_launch_valid = TRUE;
+	}
+}
+#endif
+
 
 /* Show the view next to the accessible object if specified. */
 #ifdef AT_SPI
@@ -136,10 +228,8 @@ void view_resize (struct view *view)
 }
 
 /*
- * Live-resize: scale content freely; window shell only GROWS during the drag
- * (so enlargement is not clipped). Shrink the shell on commit if needed.
- * Pin is client NW root origin at press. Surfaces stretch to content size;
- * full SVG rebuild on commit.
+ * Live-resize: window size always matches content (grow and shrink). Pin is
+ * client NW root origin at press. Art is rebuilt each frame — never stretched.
  */
 void view_create_window_mask(struct view *view);
 
@@ -148,7 +238,7 @@ void view_live_scale (struct view *view, gdouble scale, gint pin_x, gint pin_y)
 	START_FUNC
 	GdkWindow *gdkw;
 	GdkGeometry hints;
-	guint w, h, shell_w, shell_h;
+	guint w, h;
 
 	if (!view || !view->window) {
 		END_FUNC
@@ -174,22 +264,9 @@ void view_live_scale (struct view *view, gdouble scale, gint pin_x, gint pin_y)
 	view->width = w;
 	view->height = h;
 
-	shell_w = w;
-	shell_h = h;
-	if (view->status && view->status->resizing) {
-		/*
-		 * Grow-only shell: never shrink the X window mid-drag so the
-		 * operator can see the keyboard reach the screen edge. Shrink
-		 * happens in view_live_scale_commit.
-		 */
-		if (shell_w < view->status->resize_shell_w)
-			shell_w = view->status->resize_shell_w;
-		else
-			view->status->resize_shell_w = shell_w;
-		if (shell_h < view->status->resize_shell_h)
-			shell_h = view->status->resize_shell_h;
-		else
-			view->status->resize_shell_h = shell_h;
+	if (view->status) {
+		view->status->resize_shell_w = w;
+		view->status->resize_shell_h = h;
 	}
 
 	if (view->configure_handler) {
@@ -203,19 +280,30 @@ void view_live_scale (struct view *view, gdouble scale, gint pin_x, gint pin_y)
 	    GDK_HINT_WIN_GRAVITY);
 	gtk_window_set_gravity(view->window, GDK_GRAVITY_NORTH_WEST);
 
-	/*
-	 * size_request must rise with the shell or GTK/FVWM keep the old
-	 * clip (resizable=false). Never lower it until commit.
-	 */
 	gtk_widget_set_size_request(GTK_WIDGET(view->window),
-	    (gint)shell_w, (gint)shell_h);
+	    (gint)w, (gint)h);
 
 	gdkw = gtk_widget_get_window(GTK_WIDGET(view->window));
 	if (gdkw)
-		gdk_window_move_resize(gdkw, pin_x, pin_y,
-		    (gint)shell_w, (gint)shell_h);
+		gdk_window_move_resize(gdkw, pin_x, pin_y, (gint)w, (gint)h);
 
-	gtk_widget_queue_draw(GTK_WIDGET(view->window));
+	/* Force fresh SVG/key art at this scale (no stretch blit). */
+	if (view->background) {
+		cairo_surface_destroy(view->background);
+		view->background = NULL;
+	}
+	if (view->symbols) {
+		cairo_surface_destroy(view->symbols);
+		view->symbols = NULL;
+	}
+	/*
+	 * Refresh XShape to the new key outlines. create_window_mask also
+	 * queue_draws; do not paint an opaque panel under the holes.
+	 */
+	if (settings_get_bool(SETTINGS_TRANSPARENT) && !view->composite && gdkw)
+		view_create_window_mask(view);
+	else
+		gtk_widget_queue_draw(GTK_WIDGET(view->window));
 	END_FUNC
 }
 
@@ -265,6 +353,27 @@ void view_live_scale_commit (struct view *view)
 	}
 	view_create_window_mask(view);
 	gtk_widget_queue_draw(GTK_WIDGET(view->window));
+	END_FUNC
+}
+
+/* Click on move (no drag): restore cold-start / default open position. */
+void view_restore_open_position (struct view *view)
+{
+	START_FUNC
+	gint x, y;
+
+	if (!view || !view->window)
+		return;
+	if (view->status && view->status->move_launch_valid) {
+		x = view->status->move_launch_x;
+		y = view->status->move_launch_y;
+	} else {
+		x = settings_get_int(SETTINGS_XPOS);
+		y = settings_get_int(SETTINGS_YPOS);
+	}
+	gtk_window_move(view->window, x, y);
+	settings_set_int(SETTINGS_XPOS, x);
+	settings_set_int(SETTINGS_YPOS, y);
 	END_FUNC
 }
 
@@ -656,7 +765,10 @@ void view_configure (GtkWidget *window, GdkEventConfigure* pConfig, struct view 
 	gint xpos, ypos;
 	if ((!view->window)||(!gtk_widget_get_visible(window))) return;
 
-	/* Live-resize owns size/scale; ignore configure feedback. */
+	/*
+	 * Live-resize / live-move own geometry. Configure size chatter during
+	 * move rebuilds glyphs at jittery scales (wavy labels); ignore it.
+	 */
 	if (view->status && status_get_resizing(view->status)) {
 		END_FUNC
 		return;
@@ -670,6 +782,11 @@ void view_configure (GtkWidget *window, GdkEventConfigure* pConfig, struct view 
 		settings_set_int(SETTINGS_XPOS, xpos);
 	if (settings_get_int(SETTINGS_YPOS)!=ypos)
 		settings_set_int(SETTINGS_YPOS, ypos);
+
+	if (view->status && status_get_moving(view->status)) {
+		END_FUNC
+		return;
+	}
 
 	/* handle resize events */
 	if ((pConfig->width!=view->width) || (pConfig->height!=view->height)) {
@@ -710,34 +827,8 @@ void view_draw_background (struct view *view, cairo_t *context)
 		view_background_draw(view, context);
 	}
 
-	/* paint the background */
+	/* paint the background (never stretch — live-scale rebuilds art) */
 	cairo_set_operator(context, CAIRO_OPERATOR_OVER);
-	if (view->status && status_get_resizing(view->status) && view->background) {
-		/* Stretch cached art while the window size tracks the drag. */
-		double sw, sh;
-		cairo_surface_t *s = view->background;
-		if (cairo_surface_get_type(s) == CAIRO_SURFACE_TYPE_XLIB) {
-			sw = (double)cairo_xlib_surface_get_width(s);
-			sh = (double)cairo_xlib_surface_get_height(s);
-		} else if (cairo_surface_get_type(s) == CAIRO_SURFACE_TYPE_IMAGE) {
-			sw = (double)cairo_image_surface_get_width(s);
-			sh = (double)cairo_image_surface_get_height(s);
-		} else {
-			sw = sh = 0.0;
-		}
-		if (sw > 0.0 && sh > 0.0 &&
-		    (sw != (double)view->width || sh != (double)view->height)) {
-			cairo_save(context);
-			cairo_scale(context,
-			    (double)view->width / sw,
-			    (double)view->height / sh);
-			cairo_set_source_surface(context, view->background, 0, 0);
-			cairo_paint(context);
-			cairo_restore(context);
-			END_FUNC
-			return;
-		}
-	}
 	cairo_set_source_surface(context, view->background, 0, 0);
 	cairo_paint(context);
 	END_FUNC
@@ -778,25 +869,18 @@ void view_expose (GtkWidget *window, cairo_t* context, struct view *view)
 {
 	START_FUNC
 	enum key_state state;
-	GtkAllocation alloc;
-
-	gtk_widget_get_allocation(window, &alloc);
 
 	/*
-	 * During grow-only live-resize the shell may be larger than content
-	 * (while shrinking). Clear the full allocation so the SE margin is
-	 * empty rather than stale pixels; keyboard paints at content size.
+	 * Do not SOURCE-fill with opaque black during live-resize: with
+	 * transparent=false (FVWM session) that paints a solid slab. Idle and
+	 * move already leave gaps see-through via unpainted / shaped pixels;
+	 * live_scale rebuilds art + mask each frame instead of wiping.
 	 */
-	if (view->status && status_get_resizing(view->status) &&
-	    ((guint)alloc.width > view->width ||
-	     (guint)alloc.height > view->height)) {
+	if (settings_get_bool(SETTINGS_TRANSPARENT)) {
 		cairo_set_source_rgba(context, 0.0, 0.0, 0.0, 0.0);
 		cairo_set_operator(context, CAIRO_OPERATOR_SOURCE);
 		cairo_paint(context);
-	} else if (settings_get_bool(SETTINGS_TRANSPARENT)) {
-		cairo_set_source_rgba(context, 0.0, 0.0, 0.0, 0.0);
-		cairo_set_operator(context, CAIRO_OPERATOR_SOURCE);
-		cairo_paint(context);
+		cairo_set_operator(context, CAIRO_OPERATOR_OVER);
 	}
 
 	view_draw_background(view, context);
@@ -805,35 +889,8 @@ void view_expose (GtkWidget *window, cairo_t* context, struct view *view)
 	if (!view->symbols) {
 		view_symbols_draw(view, context);
 	}
-	if (view->status && status_get_resizing(view->status) && view->symbols) {
-		double sw, sh;
-		cairo_surface_t *s = view->symbols;
-		if (cairo_surface_get_type(s) == CAIRO_SURFACE_TYPE_XLIB) {
-			sw = (double)cairo_xlib_surface_get_width(s);
-			sh = (double)cairo_xlib_surface_get_height(s);
-		} else if (cairo_surface_get_type(s) == CAIRO_SURFACE_TYPE_IMAGE) {
-			sw = (double)cairo_image_surface_get_width(s);
-			sh = (double)cairo_image_surface_get_height(s);
-		} else {
-			sw = sh = 0.0;
-		}
-		if (sw > 0.0 && sh > 0.0 &&
-		    (sw != (double)view->width || sh != (double)view->height)) {
-			cairo_save(context);
-			cairo_scale(context,
-			    (double)view->width / sw,
-			    (double)view->height / sh);
-			cairo_set_source_surface(context, view->symbols, 0, 0);
-			cairo_paint(context);
-			cairo_restore(context);
-		} else {
-			cairo_set_source_surface(context, view->symbols, 0, 0);
-			cairo_paint(context);
-		}
-	} else {
-		cairo_set_source_surface(context, view->symbols, 0, 0);
-		cairo_paint(context);
-	}
+	cairo_set_source_surface(context, view->symbols, 0, 0);
+	cairo_paint(context);
 
 	/* handle composited transparency */
 	/* TODO: check for transparency support in WM */
@@ -872,9 +929,10 @@ void view_expose (GtkWidget *window, cairo_t* context, struct view *view)
 	if (view->ramble) ramble_draw(view->ramble, context);
 #endif
 
-	/* restore configure event handler (not during live-resize). */
+	/* restore configure event handler (not during live-resize/move). */
 	if (!view->configure_handler &&
-	    !(view->status && status_get_resizing(view->status)))
+	    !(view->status && (status_get_resizing(view->status) ||
+	      status_get_moving(view->status))))
 		view->configure_handler=g_signal_connect(G_OBJECT(view->window), "configure-event",
 			G_CALLBACK(view_configure), view);
 	END_FUNC
@@ -1100,7 +1158,17 @@ struct view *view_new (struct status *status, struct style *style, GSList *keybo
 		GDK_ENTER_NOTIFY_MASK|GDK_LEAVE_NOTIFY_MASK|GDK_STRUCTURE_MASK|GDK_POINTER_MOTION_MASK);
 	gtk_widget_set_app_paintable(GTK_WIDGET(view->window), TRUE);
 	gtk_window_set_decorated(view->window, settings_get_bool(SETTINGS_DECORATED));
+#ifndef FLORENCE_GREETER
+	/* Greeter-like open pos, raised by the Start/taskbar height. */
+	session_place_keyboard(view);
+#else
 	gtk_window_move(view->window, settings_get_int(SETTINGS_XPOS), settings_get_int(SETTINGS_YPOS));
+	if (status) {
+		status->move_launch_x = settings_get_int(SETTINGS_XPOS);
+		status->move_launch_y = settings_get_int(SETTINGS_YPOS);
+		status->move_launch_valid = TRUE;
+	}
+#endif
 	/*g_signal_connect(gdk_keymap_get_default(), "keys-changed", G_CALLBACK(view_on_keys_changed), view);*/
 	xkeyboard_register_events(status->xkeyboard, view_on_keys_changed, (gpointer)view);
 	g_signal_connect(G_OBJECT(view->window), "screen-changed", G_CALLBACK(view_screen_changed), view);
@@ -1110,8 +1178,27 @@ struct view *view_new (struct status *status, struct style *style, GSList *keybo
 	g_signal_connect(G_OBJECT(view->window), "window-state-event", G_CALLBACK(view_window_state), view);
 	view_screen_changed(GTK_WIDGET(view->window), NULL, view);
 	g_signal_connect(G_OBJECT(view->window), "destroy", G_CALLBACK(view_on_destroy), view);
-	gtk_widget_show(GTK_WIDGET(view->window));
-	view_create_window_mask(view);
+	/*
+	 * hide-on-start: realize for shape/mask, but do not map — mapping then
+	 * hiding flashes the full keyboard for a frame (glyph-only startup).
+	 */
+	if (settings_get_bool(SETTINGS_HIDE_ON_START)) {
+		gtk_widget_realize(GTK_WIDGET(view->window));
+#ifndef FLORENCE_GREETER
+		/* gtk_window_move before realize is often ignored; re-apply. */
+		session_place_keyboard(view);
+		if (gtk_widget_get_window(GTK_WIDGET(view->window)) &&
+		    view->status && view->status->move_launch_valid)
+			gdk_window_move(gtk_widget_get_window(GTK_WIDGET(view->window)),
+			    view->status->move_launch_x,
+			    view->status->move_launch_y);
+#endif
+		if (gtk_widget_get_window(GTK_WIDGET(view->window)))
+			view_create_window_mask(view);
+	} else {
+		gtk_widget_show(GTK_WIDGET(view->window));
+		view_create_window_mask(view);
+	}
 
 	/* register settings callbacks */
 	settings_changecb_register(SETTINGS_TRANSPARENT, view_set_transparent, view);
