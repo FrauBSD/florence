@@ -690,16 +690,6 @@
 		<xpos>1</xpos>
 		<ypos>5</ypos>
 	</key>
-	<key>
-		<action>bigger</action>
-		<xpos>1</xpos>
-		<ypos>7</ypos>
-	</key>
-	<key>
-		<action>smaller</action>
-		<xpos>1</xpos>
-		<ypos>9</ypos>
-	</key>
 	</keyboard>
 </extension>
 </layout>

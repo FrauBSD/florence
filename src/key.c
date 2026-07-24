@@ -346,16 +346,32 @@ void key_release(struct key *key, struct status *status)
 					case KEY_REDUCE: view_hide(status->view); break;
 					case KEY_CONFIG: settings(); break;
 					case KEY_MOVE: status_set_moving(status, FALSE); break;
-					case KEY_BIGGER: settings_set_double(SETTINGS_SCALEX,
-							settings_get_double(SETTINGS_SCALEX)*1.05, TRUE);
-						settings_set_double(SETTINGS_SCALEY,
-							settings_get_double(SETTINGS_SCALEY)*1.05, TRUE);
+					/*
+					 * Stock bigger/smaller multiplied scale with no
+					 * bounds and notified GSettings on every click.
+					 * That raced keep_ratio configure handling and
+					 * could grow the window without limit — SIGSEGV
+					 * within seconds of mashing +/−. Clamp to the
+					 * same range later used by live resize (10–72).
+					 */
+					case KEY_BIGGER: {
+						gdouble sx = settings_get_double(SETTINGS_SCALEX) * 1.05;
+						gdouble sy = settings_get_double(SETTINGS_SCALEY) * 1.05;
+						if (sx > 72.0) sx = 72.0;
+						if (sy > 72.0) sy = 72.0;
+						settings_set_double(SETTINGS_SCALEX, sx, TRUE);
+						settings_set_double(SETTINGS_SCALEY, sy, TRUE);
 						break;
-					case KEY_SMALLER: settings_set_double(SETTINGS_SCALEX,
-							settings_get_double(SETTINGS_SCALEX)*0.95, TRUE);
-						settings_set_double(SETTINGS_SCALEY,
-							settings_get_double(SETTINGS_SCALEY)*0.95, TRUE);
+					}
+					case KEY_SMALLER: {
+						gdouble sx = settings_get_double(SETTINGS_SCALEX) * 0.95;
+						gdouble sy = settings_get_double(SETTINGS_SCALEY) * 0.95;
+						if (sx < 10.0) sx = 10.0;
+						if (sy < 10.0) sy = 10.0;
+						settings_set_double(SETTINGS_SCALEX, sx, TRUE);
+						settings_set_double(SETTINGS_SCALEY, sy, TRUE);
 						break;
+					}
 					case KEY_SWITCH:
 						xkeyboard_layout_change(status->xkeyboard); break;
 					case KEY_EXTEND: key_extend(action); break;
