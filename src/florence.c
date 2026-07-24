@@ -92,18 +92,43 @@ gboolean flo_mouse_leave_event (GtkWidget *window, GdkEvent *event, gpointer use
 	START_FUNC
 	gint x, y;
 	struct florence *florence=(struct florence *)user_data;
-	status_focus_set(florence->status, NULL);
+
 	status_timer_stop(florence->status);
-	/* As we don't support multitouch yet, and we no longer get button events when the mouse is outside,
-	 * we just release any pressed key when the mouse leaves. */
 	if (status_get_moving(florence->status)) {
-		gdk_device_get_position(gdk_device_manager_get_client_pointer(
-			gdk_display_get_device_manager(gdk_display_get_default())), NULL, &x, &y);
+		/* Keep dragging; seat grab delivers motion outside the window. */
+		if (event && event->type == GDK_LEAVE_NOTIFY) {
+			x = (gint)((GdkEventCrossing *)event)->x_root;
+			y = (gint)((GdkEventCrossing *)event)->y_root;
+		} else {
+			gdk_device_get_position(gdk_device_manager_get_client_pointer(
+				gdk_display_get_device_manager(gdk_display_get_default())),
+				NULL, &x, &y);
+		}
 		gtk_window_move(GTK_WINDOW(window), x-florence->xpos, y-florence->ypos);
-	} else {
-		status_pressed_set(florence->status, NULL);
-		status_press_latched(florence->status, NULL);
+		END_FUNC
+		return FALSE;
 	}
+
+	/* Ignore inferior/virtual leaves (crossing child widgets). */
+	if (event && event->type == GDK_LEAVE_NOTIFY &&
+	    ((GdkEventCrossing *)event)->mode != GDK_CROSSING_NORMAL) {
+		END_FUNC
+		return FALSE;
+	}
+
+	/*
+	 * Finger/mouse still down: keep the key held so X auto-repeat continues.
+	 * Touch jitter often synthesizes Leave/Motion/"drag"; releasing here
+	 * was why hold-to-repeat worked with the mouse but not the finger.
+	 * ButtonRelease still arrives via the implicit grab.
+	 */
+	if (status_pressed_get(florence->status)) {
+		END_FUNC
+		return FALSE;
+	}
+
+	status_focus_set(florence->status, NULL);
+	status_pressed_set(florence->status, NULL);
 #ifdef ENABLE_RAMBLE
 	if (florence->ramble) {
 		ramble_reset(florence->ramble, gtk_widget_get_window(GTK_WIDGET(florence->view->window)), NULL);
@@ -131,6 +156,32 @@ gboolean flo_button_press_event (GtkWidget *window, GdkEventButton *event, gpoin
 		if ((event->type==GDK_2BUTTON_PRESS) || (event->type==GDK_3BUTTON_PRESS)) {
 			END_FUNC
 			return FALSE;
+		}
+		/*
+		 * Move handle: mouse/trackpad → WM move (smooth). Finger →
+		 * Florence's own drag (touch implicit grab). begin_move_drag is
+		 * choppy on the digitizer; manual move stalls without a grab on
+		 * mouse — so pick the path by input source.
+		 */
+		if (key && key_get_action(key, florence->status) == KEY_MOVE) {
+			GdkDevice *dev = gdk_event_get_source_device((GdkEvent *)event);
+			GdkInputSource src = dev ? gdk_device_get_source(dev) :
+			    GDK_SOURCE_MOUSE;
+			gboolean finger =
+			    (src == GDK_SOURCE_TOUCHSCREEN) ||
+			    gdk_event_get_pointer_emulated((GdkEvent *)event);
+
+			florence->xpos = (gint)event->x;
+			florence->ypos = (gint)event->y;
+			if (!finger) {
+				gtk_window_begin_move_drag(GTK_WINDOW(window),
+					event->button,
+					(gint)event->x_root, (gint)event->y_root,
+					event->time);
+				END_FUNC
+				return TRUE;
+			}
+			/* Finger: fall through to status_pressed_set → KEY_MOVE. */
 		}
 	} else {
 		key=status_focus_get(florence->status);
@@ -241,13 +292,25 @@ gboolean flo_mouse_move_event(GtkWidget *window, GdkEvent *event, gpointer user_
 #endif
 	struct florence *florence=(struct florence *)user_data;
 	if (status_get_moving(florence->status)) {
-		gdk_device_get_position(gdk_device_manager_get_client_pointer(
-			gdk_display_get_device_manager(gdk_display_get_default())), NULL, &x, &y);
+		/* Prefer event coords (reliable under seat grab / multi-device). */
+		if (event && event->type == GDK_MOTION_NOTIFY) {
+			x = (gint)((GdkEventMotion *)event)->x_root;
+			y = (gint)((GdkEventMotion *)event)->y_root;
+		} else {
+			gdk_device_get_position(gdk_device_manager_get_client_pointer(
+				gdk_display_get_device_manager(gdk_display_get_default())),
+				NULL, &x, &y);
+		}
 		gtk_window_move(GTK_WINDOW(window), x-florence->xpos, y-florence->ypos);
 	} else {
 		/* Remember mouse position for moving */
 		florence->xpos=(gint)((GdkEventMotion*)event)->x;
 		florence->ypos=(gint)((GdkEventMotion*)event)->y;
+		/* Hold-to-repeat: ignore motion while a key is down (touch slop). */
+		if (status_pressed_get(florence->status)) {
+			END_FUNC
+			return FALSE;
+		}
 #ifdef ENABLE_RAMBLE
 		struct key *key=status_hit_get(florence->status, florence->xpos, florence->ypos, &hit);
 		if (status_im_get(florence->status)==STATUS_IM_RAMBLE) {
