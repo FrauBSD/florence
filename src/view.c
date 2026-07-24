@@ -25,6 +25,8 @@
 #include "settings.h"
 #include "keyboard.h"
 #include "tools.h"
+#include "fsm.h"
+#include "key.h"
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
 #include <cairo/cairo-xlib.h>
@@ -32,6 +34,9 @@
 #include <X11/Xutil.h>
 #include <X11/extensions/shape.h>
 #include <X11/extensions/Xcomposite.h>
+#ifdef ENABLE_XKB
+#include <X11/XKBlib.h>
+#endif
 
 
 /* Show the view next to the accessible object if specified. */
@@ -667,11 +672,58 @@ void view_expose (GtkWidget *window, cairo_t* context, struct view *view)
 	END_FUNC
 }
 
+/*
+ * Match Caps/Num (and other XKB lockers) to the real lock LEDs so the OSK
+ * shows green when active — needed in tablet mode with no physical LED view.
+ */
+static void
+view_sync_lockers(struct view *view)
+{
+	START_FUNC
+#ifdef ENABLE_XKB
+	Display *dpy;
+	XkbStateRec st;
+	GSList *kblist, *keylist;
+	struct keyboard *kb;
+	struct key *key;
+	GdkModifierType mod;
+	gboolean want_locked, is_locked;
+
+	if (!view || !view->status || !view->status->xkeyboard) {
+		END_FUNC
+		return;
+	}
+	dpy = (Display *)gdk_x11_get_default_xdisplay();
+	XkbGetState(dpy, XkbUseCoreKbd, &st);
+	view->status->xkeyboard->xkb_state = st;
+
+	for (kblist = view->keyboards; kblist; kblist = kblist->next) {
+		kb = (struct keyboard *)kblist->data;
+		if (!kb || !keyboard_activated(kb))
+			continue;
+		for (keylist = kb->keys; keylist; keylist = keylist->next) {
+			key = (struct key *)keylist->data;
+			if (!key || !key_is_locker(key))
+				continue;
+			mod = key_get_modifier(key);
+			if (!mod)
+				continue;
+			want_locked = (st.locked_mods & mod) != 0;
+			is_locked = (key->state == KEY_LOCKED);
+			if (want_locked != is_locked)
+				fsm_process(view->status, key, FSM_PRESSED);
+		}
+	}
+#endif
+	END_FUNC
+}
+
 /* on keys changed events */
 void view_on_keys_changed(gpointer user_data)
 {
 	START_FUNC
 	struct view *view=(struct view *)user_data;
+	view_sync_lockers(view);
 	if (view->symbols) cairo_surface_destroy(view->symbols);
 	view->symbols=NULL;
 	if (view->window) gtk_widget_queue_draw(GTK_WIDGET(view->window));
