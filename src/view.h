@@ -99,6 +99,8 @@ struct key *view_hit_get (struct view *view, gint x, gint y);
 #endif
 /* get gtk window of the view */
 GtkWindow *view_window_get (struct view *view);
+/* Sync Caps/Num lock key colours from XKB (also xkeyboard event callback). */
+void view_on_keys_changed(gpointer user_data);
 /* get gtk window of the view */
 void view_status_set (struct view *view, struct status *status);
 
