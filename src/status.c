@@ -177,6 +177,22 @@ void status_focus_set(struct status *status, struct key *focus)
 {
 	START_FUNC
 	struct key *old = status->focus;
+
+	/*
+	 * While a key is held (mouse button or finger down), do not change
+	 * focus in a way that releases it. Touch jitter / tiny drags were
+	 * cancelling auto-repeat on arrows and other hold keys.
+	 */
+	if (status->pressed && !status->moving) {
+		if (status->focus != status->pressed) {
+			status->focus = status->pressed;
+			view_update(status->view, old, FALSE);
+			view_update(status->view, status->focus, FALSE);
+		}
+		END_FUNC
+		return;
+	}
+
 	status->focus=focus;
 	view_update(status->view, old, FALSE);
 	view_update(status->view, status->focus, FALSE);
@@ -211,7 +227,9 @@ void status_pressed_set(struct status *status, struct key *pressed)
 	} else {
 		event=FSM_RELEASE;
 		if (touch && !((status->pressed)&&(key_get_action(status->pressed, status)==KEY_MOVE))) {
-			if (status->pressed && (!key_get_modifier(status->pressed))) {
+			/* Do not force-clear Caps/Num lock visuals on release. */
+			if (status->pressed && (!key_get_modifier(status->pressed)) &&
+			    !key_is_locker(status->pressed)) {
 				key_state_set(status->pressed, KEY_RELEASED);
 				view_update(status->view, status->pressed, FALSE);
 			}
@@ -220,8 +238,11 @@ void status_pressed_set(struct status *status, struct key *pressed)
 	}
 
 	fsm_process(status, status->pressed, event);
-	if (touch) { if (status->pressed && key_get_modifier(status->pressed)) status->pressed=NULL; }
-	else status->pressed=pressed;
+	if (touch) {
+		if (status->pressed &&
+		    (key_get_modifier(status->pressed) || key_is_locker(status->pressed)))
+			status->pressed=NULL;
+	} else status->pressed=pressed;
 	END_FUNC
 }
 
@@ -300,6 +321,16 @@ void status_release (struct status *status, struct key *key)
 #ifdef ENABLE_XRECORD
 	status_record_process(status);
 #endif
+	/*
+	 * Caps/Num: flush X so locked_mods matches the key we just sent, then
+	 * sync the green on/off indicator from XKB.
+	 */
+	if (key_is_locker(key) && status->view) {
+#ifdef ENABLE_XKB
+		XSync(gdk_x11_get_default_xdisplay(), False);
+#endif
+		view_on_keys_changed(status->view);
+	}
 	END_FUNC
 }
 
@@ -391,6 +422,43 @@ void status_unlatchorlock (struct status *status, struct key *key, enum key_stat
 	END_FUNC
 }
 
+/*
+ * Touch bounce is typically <80ms between duplicate presses. Intentional
+ * taps (latch→lock, lock→off, off→latch) are usually ≥100ms apart.
+ *
+ * IMPORTANT: do not special-case RELEASED→LATCHED. After unlock, a bounce
+ * press would immediately re-latch and the cycle became on/lock/on/lock
+ * with no way to turn Shift off without typing a character.
+ */
+#define STATUS_MOD_BOUNCE_US	80000	/* 80 ms */
+
+void
+status_mod_state_entered(struct status *status)
+{
+	if (status)
+		status->mod_state_entered_us = g_get_monotonic_time();
+}
+
+gboolean
+status_mod_bounce_guard(struct status *status, enum key_state from,
+	enum key_state to)
+{
+	gint64 now, dt;
+
+	(void)from;
+	(void)to;
+	if (!status)
+		return FALSE;
+	/* First transition ever: no prior state time. */
+	if (status->mod_state_entered_us == 0)
+		return TRUE;
+	now = g_get_monotonic_time();
+	dt = now - status->mod_state_entered_us;
+	if (dt < STATUS_MOD_BOUNCE_US)
+		return FALSE;
+	return TRUE;
+}
+
 /* latch a key */
 void status_latch (struct status *status, struct key *key)
 {
@@ -421,6 +489,48 @@ void status_unlatch_all (struct status *status, struct key *key)
 	}
 	status_globalmod_calc(status);
 	END_FUNC
+}
+
+/* True for Super/Mod4 (Florence left/right Super keys). */
+gboolean
+status_key_is_super(struct key *key)
+{
+	GdkModifierType m;
+	struct key_mod *mod;
+	guint code;
+
+	if (!key)
+		return FALSE;
+	m = key_get_modifier(key);
+	if (m & (GDK_SUPER_MASK | GDK_META_MASK | GDK_MOD4_MASK))
+		return TRUE;
+	/* Layout codes: Super_L=133, Super_R=134 (evdev / Xorg). */
+	if (key->mods && key->mods->data) {
+		mod = (struct key_mod *)key->mods->data;
+		if (mod->type == KEY_CODE && mod->data) {
+			code = ((struct key_code *)mod->data)->code;
+			if (code == 133 || code == 134)
+				return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/* Emit a Super press/release (opens FVWM Start via Key Super_L binding). */
+void
+status_super_tap(struct status *status, struct key *key)
+{
+	struct key_mod *mod;
+	guint code = 133;
+
+	if (key && key->mods && key->mods->data) {
+		mod = (struct key_mod *)key->mods->data;
+		if (mod->type == KEY_CODE && mod->data)
+			code = ((struct key_code *)mod->data)->code;
+	}
+	status_focus_window(status);
+	status->spi = key_event(code, TRUE, status->spi);
+	status->spi = key_event(code, FALSE, status->spi);
 }
 
 /* lock a key*/
@@ -688,7 +798,7 @@ void status_spi_disable(struct status *status)
 /* tell if spi is enabled */
 gboolean status_spi_is_enabled(struct status *status) { return status->spi; }
 
-/* set/get moving status */
+/* set/get moving status (finger/touch path only; mouse uses WM move). */
 void status_set_moving(struct status *status, gboolean moving)
 {
 	START_FUNC

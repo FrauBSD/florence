@@ -260,27 +260,40 @@ guint xkeyboard_getKeyval(struct xkeyboard *xkeyboard, guint code, GdkModifierTy
 void xkeyboard_key_properties_get(struct xkeyboard *xkeyboard, guint code, GdkModifierType *mod, gboolean *locker)
 {
 	START_FUNC
+	gchar *symbolname;
+	XkbAction *act;
+
 	*locker=FALSE;
 	*mod=0;
 #ifdef ENABLE_XKB
 	*mod=xkeyboard->xkb_desc->map->modmap[code];
-	if (XkbKeyAction(xkeyboard->xkb_desc, code, 0)) {
-		switch (XkbKeyAction(xkeyboard->xkb_desc, code, 0)->type) {
-			case XkbSA_LockMods:*locker=TRUE; break;
-			case XkbSA_SetMods:*mod=XkbKeyAction(xkeyboard->xkb_desc, code, 0)->mods.mask;
+	act = XkbKeyAction(xkeyboard->xkb_desc, code, 0);
+	if (act) {
+		switch (act->type) {
+			case XkbSA_LockMods:
+				*locker=TRUE;
+				/* Caps often has modmap 0; lock mask is on the action. */
+				if (act->mods.mask)
+					*mod = act->mods.mask;
+				break;
+			case XkbSA_SetMods:
+				*mod=act->mods.mask;
 				break;
 		}
 	}
-#else
-	gchar *symbolname=gdk_keyval_name(xkeyboard_getKeyval(xkeyboard, code, 0));
+#endif
+	/* Symbol fallback: Caps/Num must always be lockers with a usable mask. */
+	symbolname=gdk_keyval_name(xkeyboard_getKeyval(xkeyboard, code, 0));
 	if (symbolname) {
-		if ((!strcmp(symbolname, "Caps_Lock"))) {
+		if (!strcmp(symbolname, "Caps_Lock")) {
 			*locker=TRUE;
-			*mod=2;
-		} else if ((!strcmp(symbolname, "Num_Lock"))) {
+			if (!*mod) *mod=GDK_LOCK_MASK;
+		} else if (!strcmp(symbolname, "Num_Lock")) {
 			*locker=TRUE;
-			*mod=16;
-		} else if ((!strcmp(symbolname, "Shift_L")) ||
+			if (!*mod) *mod=GDK_MOD2_MASK;
+		}
+#ifndef ENABLE_XKB
+		else if ((!strcmp(symbolname, "Shift_L")) ||
 			(!strcmp(symbolname, "Shift_R"))) {
 			*mod=1;
 		} else if ((!strcmp(symbolname, "Alt_L")) ||
@@ -292,8 +305,8 @@ void xkeyboard_key_properties_get(struct xkeyboard *xkeyboard, guint code, GdkMo
 		} else if ((!strcmp(symbolname, "ISO_Level3_Shift"))) {
 			*mod=128;
 		}
-	}
 #endif
+	}
 	END_FUNC
 }
 
@@ -323,8 +336,13 @@ struct xkeyboard *xkeyboard_new()
 	xkeyboard_layout(xkeyboard);
 	XkbSelectEvents(gdk_x11_display_get_xdisplay(gdk_display_get_default()),
 		XkbUseCoreKbd, XkbNewKeyboardNotifyMask, XkbNewKeyboardNotifyMask);
+	/*
+	 * Also watch modifier lock (Caps/Num) so the OSK can light those keys.
+	 * Group-only notify left Caps looking idle in tablet mode.
+	 */
 	XkbSelectEventDetails(gdk_x11_display_get_xdisplay(gdk_display_get_default()),
-		XkbUseCoreKbd, XkbStateNotify, XkbAllStateComponentsMask, XkbGroupStateMask);
+		XkbUseCoreKbd, XkbStateNotify, XkbAllStateComponentsMask,
+		XkbGroupStateMask | XkbModifierLockMask);
 	gdk_window_add_filter(NULL, xkeyboard_event_handler, xkeyboard);
 
 	/* get the modifier map from xkb */

@@ -58,6 +58,12 @@ void status_unlock (struct status *, struct key *);
 void status_update_view (struct status *, struct key *);
 void status_update_key (struct status *status, struct key *key);
 void status_error (struct status *, struct key *);
+gboolean status_key_is_super(struct key *key);
+void status_super_tap(struct status *status, struct key *key);
+/* TRUE if promoting/demoting sticky mod is allowed (not a sub-80ms bounce). */
+gboolean status_mod_bounce_guard(struct status *status, enum key_state from,
+	enum key_state to);
+void status_mod_state_entered(struct status *status);
 
 /* describes a window that has the focus */
 struct status_focus {
@@ -86,6 +92,8 @@ struct status {
 #endif
 	struct xkeyboard *xkeyboard; /* data from xkb */
 	enum status_input_method input_method; /* selected input method */
+	/* When current modifier mode (latched/locked/released) was entered. */
+	gint64 mod_state_entered_us;
 };
 
 #ifdef ENABLE_XRECORD

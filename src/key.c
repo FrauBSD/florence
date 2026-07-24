@@ -291,6 +291,7 @@ void key_press(struct key *key, struct status *status)
 			case KEY_ACTION:
 				action=(struct key_action *)mod->data;
 				switch (action->type) {
+					/* Finger path: own drag. Mouse uses begin_move_drag. */
 					case KEY_MOVE: status_set_moving(status, TRUE); break;
 					case KEY_BIGGER:
 					case KEY_SMALLER:
@@ -483,6 +484,11 @@ void key_focus_draw(struct key *key, struct style *style, cairo_t *cairoctx,
 	/* determine the color of th key */
 	switch (key->state) {
 		case KEY_LOCKED:
+			/* Caps/Num lock: green "on" (latched colour). Sticky
+			 * Shift lock keeps the activated colour. */
+			color = key_is_locker(key) ? STYLE_LATCHED_COLOR :
+			    STYLE_ACTIVATED_COLOR;
+			break;
 		case KEY_PRESSED: color=STYLE_ACTIVATED_COLOR; break;
 		case KEY_RELEASED: color=STYLE_KEY_COLOR; break;
 		case KEY_LATCHED: color=STYLE_LATCHED_COLOR; break;
@@ -507,7 +513,9 @@ void key_press_draw(struct key *key, struct style *style, cairo_t *cairoctx, str
 	cairo_save(cairoctx);
 	cairo_translate(cairoctx, key->x-(key->w/2.0), key->y-(key->h/2.0));
 	style_shape_draw(style, key->shape, cairoctx, key->w, key->h,
-		key->state==KEY_LATCHED?STYLE_LATCHED_COLOR:STYLE_ACTIVATED_COLOR);
+		(key->state == KEY_LATCHED ||
+		 (key->state == KEY_LOCKED && key_is_locker(key))) ?
+			STYLE_LATCHED_COLOR : STYLE_ACTIVATED_COLOR);
 	key_symbol_draw(key, style, cairoctx, status, TRUE);
 	cairo_restore(cairoctx);
 	END_FUNC
