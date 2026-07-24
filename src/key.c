@@ -55,7 +55,8 @@ static const gchar *key_actions[] = {
 	"smaller",
 	"switch",
 	"extend",
-	"unextend"
+	"unextend",
+	"resize"
 };
 
 /* Parse string into key type enumeration */
@@ -291,8 +292,9 @@ void key_press(struct key *key, struct status *status)
 			case KEY_ACTION:
 				action=(struct key_action *)mod->data;
 				switch (action->type) {
-					/* Finger path: own drag. Mouse uses begin_move_drag. */
+					/* Always Florence live-move + seat grab (see florence.c). */
 					case KEY_MOVE: status_set_moving(status, TRUE); break;
+					case KEY_RESIZE: status_set_resizing(status, TRUE); break;
 					case KEY_BIGGER:
 					case KEY_SMALLER:
 					case KEY_CONFIG:
@@ -347,6 +349,7 @@ void key_release(struct key *key, struct status *status)
 					case KEY_REDUCE: view_hide(status->view); break;
 					case KEY_CONFIG: settings(); break;
 					case KEY_MOVE: status_set_moving(status, FALSE); break;
+					case KEY_RESIZE: status_set_resizing(status, FALSE); break;
 					/*
 					 * Stock bigger/smaller multiplied scale with no
 					 * bounds and notified GSettings on every click.

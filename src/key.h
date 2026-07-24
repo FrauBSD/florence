@@ -51,6 +51,7 @@ enum key_action_type {
 	KEY_SWITCH,/* Switch layout group */
 	KEY_EXTEND, /* argument = extension name */
 	KEY_UNEXTEND, /* argument = extension name */
+	KEY_RESIZE, /* Live-resize keyboard (drag; like MOVE) */
 	KEY_UNKNOWN, /* unknown action */
 	KEY_NOP /* no action */
 };
@@ -115,6 +116,7 @@ void key_free(struct key *key);
 /* Send SPI events coresponding to the key */
 void key_press(struct key *key, struct status *status);
 void key_release(struct key *key, struct status *status);
+gboolean key_event(unsigned int code, gboolean pressed, gboolean spi_enabled);
 
 /* Draw the shape of the key to the cairo surface. */
 void key_shape_draw(struct key *key, struct style *style, cairo_t *cairoctx);

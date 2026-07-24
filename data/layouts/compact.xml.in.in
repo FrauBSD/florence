@@ -690,6 +690,11 @@
 		<xpos>1</xpos>
 		<ypos>5</ypos>
 	</key>
+	<key>
+		<action>resize</action>
+		<xpos>1</xpos>
+		<ypos>7</ypos>
+	</key>
 	</keyboard>
 </extension>
 </layout>

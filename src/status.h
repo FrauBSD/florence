@@ -84,6 +84,16 @@ struct status {
 	struct view *view; /* view to update on status change */
 	gboolean spi; /* tell if spi events are enabled */
 	gboolean moving; /* true when moving key is pressed */
+	gboolean move_grabbed; /* seat grab held for live-move */
+	gboolean resizing; /* true when resize key is pressed (live scale) */
+	gboolean resize_grabbed; /* seat grab held for live-resize */
+	gboolean resize_dragged; /* TRUE once pointer moves past click-slop */
+	gdouble resize_scale_launch; /* SCALEX at cold start (click resets here) */
+	gdouble resize_scale0; /* SCALEX at resize press */
+	gdouble resize_last; /* last applied live scale (throttle) */
+	gint resize_root_x, resize_root_y; /* root pointer at resize press */
+	gint resize_pin_x, resize_pin_y; /* window NW root pos (pinned) */
+	guint resize_shell_w, resize_shell_h; /* window size: grow-only during drag */
 	struct status_focus *w_focus; /* window that has the focus, or NULL */
 #ifdef ENABLE_XRECORD
 	XRecordContext RecordContext; /* Context to record keyboard events */
@@ -158,6 +168,9 @@ gboolean status_spi_is_enabled(struct status *status);
 /* set/get moving status */
 void status_set_moving(struct status *status, gboolean moving);
 gboolean status_get_moving(struct status *status);
+/* set/get live-resize status (scale drag) */
+void status_set_resizing(struct status *status, gboolean resizing);
+gboolean status_get_resizing(struct status *status);
 
 /* get focussed window */
 struct status_focus *status_w_focus_get(struct status *status);

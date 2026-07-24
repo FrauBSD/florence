@@ -29,10 +29,6 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
 
-
-/* bring the window back to front every seconds */
-#define FLO_TO_TOP_TIMEOUT 1000
-
 /* terminate the program */
 void flo_terminate(struct florence *florence)
 {
@@ -108,12 +104,46 @@ gboolean flo_mouse_leave_event (GtkWidget *window, GdkEvent *event, gpointer use
 		END_FUNC
 		return FALSE;
 	}
+	if (status_get_resizing(florence->status)) {
+		/*
+		 * Growing/shrinking moves the window edge under a stationary
+		 * pointer and synthesizes LeaveNotify. Do not re-apply scale
+		 * here — that double-fired with motion and jittered position.
+		 * Seat grab still delivers MotionNotify for tracking.
+		 */
+		END_FUNC
+		return FALSE;
+	}
 
 	/* Ignore inferior/virtual leaves (crossing child widgets). */
 	if (event && event->type == GDK_LEAVE_NOTIFY &&
 	    ((GdkEventCrossing *)event)->mode != GDK_CROSSING_NORMAL) {
 		END_FUNC
 		return FALSE;
+	}
+
+	/*
+	 * Compositor/WM restacks synthesize LeaveNotify while the pointer is
+	 * still over us — clearing hover then made the highlight flicker every
+	 * few seconds. Only clear when the pointer is truly outside.
+	 */
+	if (event && event->type == GDK_LEAVE_NOTIFY) {
+		GdkWindow *gw = gtk_widget_get_window(window);
+		gint px, py, ox, oy;
+		gint ww, wh;
+		if (gw) {
+			gdk_device_get_position(gdk_device_manager_get_client_pointer(
+				gdk_display_get_device_manager(gdk_display_get_default())),
+				NULL, &px, &py);
+			gdk_window_get_origin(gw, &ox, &oy);
+			ww = gdk_window_get_width(gw);
+			wh = gdk_window_get_height(gw);
+			if (px >= ox && py >= oy &&
+			    px < ox + ww && py < oy + wh) {
+				END_FUNC
+				return FALSE;
+			}
+		}
 	}
 
 	/*
@@ -158,30 +188,47 @@ gboolean flo_button_press_event (GtkWidget *window, GdkEventButton *event, gpoin
 			return FALSE;
 		}
 		/*
-		 * Move handle: mouse/trackpad → WM move (smooth). Finger →
-		 * Florence's own drag (touch implicit grab). begin_move_drag is
-		 * choppy on the digitizer; manual move stalls without a grab on
-		 * mouse — so pick the path by input source.
+		 * Move handle: always Florence live-move + seat grab.
+		 *
+		 * Touchscreen gestures feed XTest Button1, which GDK reports as
+		 * a mouse — begin_move_drag then leaves Button1 latched after
+		 * finger-up and breaks all subsequent 1fg pointer motion.
+		 * Physical mouse also uses this path (seat grab keeps motion).
+		 *
+		 * Resize handle: same seat-grab live-scale drag.
 		 */
 		if (key && key_get_action(key, florence->status) == KEY_MOVE) {
-			GdkDevice *dev = gdk_event_get_source_device((GdkEvent *)event);
-			GdkInputSource src = dev ? gdk_device_get_source(dev) :
-			    GDK_SOURCE_MOUSE;
-			gboolean finger =
-			    (src == GDK_SOURCE_TOUCHSCREEN) ||
-			    gdk_event_get_pointer_emulated((GdkEvent *)event);
+			GdkWindow *gdkw;
+			GdkSeat *seat;
 
 			florence->xpos = (gint)event->x;
 			florence->ypos = (gint)event->y;
-			if (!finger) {
-				gtk_window_begin_move_drag(GTK_WINDOW(window),
-					event->button,
-					(gint)event->x_root, (gint)event->y_root,
-					event->time);
-				END_FUNC
-				return TRUE;
-			}
-			/* Finger: fall through to status_pressed_set → KEY_MOVE. */
+			status_set_moving(florence->status, TRUE);
+			gdkw = gtk_widget_get_window(window);
+			seat = gdk_display_get_default_seat(gdk_display_get_default());
+			if (gdkw && seat &&
+			    gdk_seat_grab(seat, gdkw, GDK_SEAT_CAPABILITY_ALL_POINTING,
+				FALSE, NULL, (GdkEvent *)event, NULL, NULL) ==
+				GDK_GRAB_SUCCESS)
+				florence->status->move_grabbed = TRUE;
+			/* Fall through so press state tracks the key. */
+		}
+		if (key && key_get_action(key, florence->status) == KEY_RESIZE) {
+			GdkWindow *gdkw;
+			GdkSeat *seat;
+
+			status_set_resizing(florence->status, TRUE);
+			florence->status->resize_root_x = (gint)event->x_root;
+			florence->status->resize_root_y = (gint)event->y_root;
+			/* Seat grab so motion survives keep-on-top + size changes. */
+			gdkw = gtk_widget_get_window(window);
+			seat = gdk_display_get_default_seat(gdk_display_get_default());
+			if (gdkw && seat &&
+			    gdk_seat_grab(seat, gdkw, GDK_SEAT_CAPABILITY_ALL_POINTING,
+				FALSE, NULL, (GdkEvent *)event, NULL, NULL) ==
+				GDK_GRAB_SUCCESS)
+				florence->status->resize_grabbed = TRUE;
+			/* Fall through so press state tracks the key. */
 		}
 	} else {
 		key=status_focus_get(florence->status);
@@ -258,24 +305,19 @@ gboolean flo_timer_update(gpointer data)
 	return ret;
 }
 
-/* bring the window back to front: to be calles periodically */
-gboolean flo_to_top(gpointer data)
-{
-	START_FUNC
-	struct florence *florence=data;
-	GtkWindow *window=GTK_WINDOW(view_window_get(florence->view));
-	if (!settings_get_bool(SETTINGS_KEEP_ON_TOP)) return FALSE;
-	if (gtk_widget_get_visible(GTK_WIDGET(window))) gtk_window_present(window);
-	END_FUNC
-	return TRUE;
-}
-
-/* start keeping the keyboard back to front every second */
+/* Ensure the keyboard stays above; no periodic present/raise.
+ * (Stock florence called gtk_window_present() every 1s — that synthesizes
+ * leave/enter and flickers hover highlights ~1–2×/sec.) */
 void flo_start_keep_on_top(struct florence *florence, gboolean keep_on_top)
 {
 	START_FUNC
-	if (settings_get_bool(SETTINGS_KEEP_ON_TOP)) {
-		g_timeout_add(FLO_TO_TOP_TIMEOUT, flo_to_top, florence);
+	if (florence->to_top_id) {
+		g_source_remove(florence->to_top_id);
+		florence->to_top_id=0;
+	}
+	if (florence->view) {
+		gtk_window_set_keep_above(view_window_get(florence->view),
+		    keep_on_top || settings_get_bool(SETTINGS_ALWAYS_ON_TOP));
 	}
 	END_FUNC
 }
@@ -302,6 +344,41 @@ gboolean flo_mouse_move_event(GtkWidget *window, GdkEvent *event, gpointer user_
 				NULL, &x, &y);
 		}
 		gtk_window_move(GTK_WINDOW(window), x-florence->xpos, y-florence->ypos);
+	} else if (status_get_resizing(florence->status)) {
+		gdouble factor, scale;
+		gint dx, dy;
+		gint slop = 8;
+
+		if (event && event->type == GDK_MOTION_NOTIFY) {
+			x = (gint)((GdkEventMotion *)event)->x_root;
+			y = (gint)((GdkEventMotion *)event)->y_root;
+		} else {
+			gdk_device_get_position(gdk_device_manager_get_client_pointer(
+				gdk_display_get_device_manager(gdk_display_get_default())),
+				NULL, &x, &y);
+		}
+		dx = x - florence->status->resize_root_x;
+		dy = y - florence->status->resize_root_y;
+		/*
+		 * Click vs drag: ignore motion inside slop so a single click
+		 * can restore the cold-start size on release.
+		 */
+		if (!florence->status->resize_dragged) {
+			if (dx > -slop && dx < slop && dy > -slop && dy < slop) {
+				END_FUNC
+				return FALSE;
+			}
+			florence->status->resize_dragged = TRUE;
+		}
+		/* Drag SE grows, NW shrinks; ~400px → ±100% scale. */
+		factor = 1.0 + ((gdouble)(dx + dy) / 800.0);
+		if (factor < 0.45) factor = 0.45;
+		if (factor > 2.5) factor = 2.5;
+		scale = florence->status->resize_scale0 * factor;
+		view_live_scale(florence->view, scale,
+		    florence->status->resize_pin_x,
+		    florence->status->resize_pin_y);
+		florence->status->resize_last = florence->view->scalex;
 	} else {
 		/* Remember mouse position for moving */
 		florence->xpos=(gint)((GdkEventMotion*)event)->x;
@@ -403,9 +480,22 @@ void flo_layout_load(struct florence *florence)
 
 	/* get the informations about the layout */
 	layoutname=settings_get_string(SETTINGS_FILE);
-	layout=layoutreader_new(layoutname,
-		DATADIR "/layouts/florence.xml",
-		DATADIR "/relaxng/florence.rng");
+	{
+		const char *rng=DATADIR "/relaxng/florence.rng";
+		const char *home=getenv("HOME");
+		gchar *home_rng=NULL;
+
+		if (home) {
+			home_rng=g_strdup_printf(
+			    "%s/theme/florence/relaxng/florence.rng", home);
+			if (g_file_test(home_rng, G_FILE_TEST_EXISTS))
+				rng=home_rng;
+		}
+		layout=layoutreader_new(layoutname,
+		    DATADIR "/layouts/florence.xml",
+		    (char *)rng);
+		if (home_rng) g_free(home_rng);
+	}
 	layoutreader_element_open(layout, "layout");
 	infos=layoutreader_infos_new(layout);
 	flo_debug(TRACE_DEBUG, _("Layout name: \"%s\""), infos->name);

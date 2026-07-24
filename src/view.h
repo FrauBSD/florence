@@ -60,6 +60,8 @@ struct view {
 	cairo_surface_t *symbols; /* contains the symbols image of florence */
 	gboolean hand_cursor; /* true when the cursor is a hand */
 	gulong configure_handler; /* configure signal handler id */
+	guint last_xkb_group; /* last seen XKB layout group (hover flicker) */
+	gboolean have_xkb_group;
 #ifdef ENABLE_RAMBLE
 	struct ramble *ramble; /* Path of the mouse. */
 #endif
@@ -99,6 +101,10 @@ struct key *view_hit_get (struct view *view, gint x, gint y);
 #endif
 /* get gtk window of the view */
 GtkWindow *view_window_get (struct view *view);
+/* Live-resize: apply scale with NW corner pinned (no GSettings spam). */
+void view_live_scale (struct view *view, gdouble scale, gint pin_x, gint pin_y);
+/* Persist scale after a live-resize drag ends. */
+void view_live_scale_commit (struct view *view);
 /* Sync Caps/Num lock key colours from XKB (also xkeyboard event callback). */
 void view_on_keys_changed(gpointer user_data);
 /* get gtk window of the view */

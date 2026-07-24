@@ -183,7 +183,7 @@ void status_focus_set(struct status *status, struct key *focus)
 	 * focus in a way that releases it. Touch jitter / tiny drags were
 	 * cancelling auto-repeat on arrows and other hold keys.
 	 */
-	if (status->pressed && !status->moving) {
+	if (status->pressed && !status->moving && !status->resizing) {
 		if (status->focus != status->pressed) {
 			status->focus = status->pressed;
 			view_update(status->view, old, FALSE);
@@ -193,10 +193,16 @@ void status_focus_set(struct status *status, struct key *focus)
 		return;
 	}
 
+	/* Same key: skip invalidate + pressed_set(NULL) (hover flicker). */
+	if (old == focus) {
+		END_FUNC
+		return;
+	}
+
 	status->focus=focus;
 	view_update(status->view, old, FALSE);
 	view_update(status->view, status->focus, FALSE);
-	if(!status->moving) status_pressed_set(status, NULL);
+	if(!status->moving && !status->resizing) status_pressed_set(status, NULL);
 	END_FUNC
 }
 
@@ -223,10 +229,14 @@ void status_pressed_set(struct status *status, struct key *pressed)
 	/* find actions in fsm table */
 	if (pressed) {
 		event=FSM_PRESS;
-		if ((!touch) || (key_get_action(pressed, status)==KEY_MOVE)) status->pressed=pressed;
+		if ((!touch) || (key_get_action(pressed, status)==KEY_MOVE) ||
+		    (key_get_action(pressed, status)==KEY_RESIZE))
+			status->pressed=pressed;
 	} else {
 		event=FSM_RELEASE;
-		if (touch && !((status->pressed)&&(key_get_action(status->pressed, status)==KEY_MOVE))) {
+		if (touch && !((status->pressed)&&
+		    ((key_get_action(status->pressed, status)==KEY_MOVE) ||
+		     (key_get_action(status->pressed, status)==KEY_RESIZE)))) {
 			/* Do not force-clear Caps/Num lock visuals on release. */
 			if (status->pressed && (!key_get_modifier(status->pressed)) &&
 			    !key_is_locker(status->pressed)) {
@@ -254,7 +264,14 @@ void status_pressed_set(struct status *status, struct key *pressed)
 void status_update_view (struct status *status, struct key *key)
 {
 	START_FUNC
-	if (status->view) view_update(status->view, key, key_get_modifier(key));
+	/*
+	 * Never pass statechange=TRUE here: that destroys the symbols surface
+	 * and redraws the whole keyboard. Caps/Num XKB sync and sticky-mod
+	 * latch used key_get_modifier() as the flag, which flickered hover
+	 * every few seconds. Press/latch colours are redrawn via view_update
+	 * invalidate + expose.
+	 */
+	if (status->view) view_update(status->view, key, FALSE);
 	END_FUNC
 }
 
@@ -798,16 +815,107 @@ void status_spi_disable(struct status *status)
 /* tell if spi is enabled */
 gboolean status_spi_is_enabled(struct status *status) { return status->spi; }
 
-/* set/get moving status (finger/touch path only; mouse uses WM move). */
+/* set/get moving status (always Florence live-move + seat grab). */
 void status_set_moving(struct status *status, gboolean moving)
 {
 	START_FUNC
-	status->moving=moving;
-	if (moving) gtk_window_set_gravity(view_window_get(status->view), GDK_GRAVITY_STATIC);
-	else gtk_window_set_gravity(view_window_get(status->view), GDK_GRAVITY_NORTH_WEST);
+	GtkWindow *win;
+
+	if (moving) {
+		if (!status->moving) {
+			win=view_window_get(status->view);
+			if (win)
+				gtk_window_set_gravity(win, GDK_GRAVITY_STATIC);
+		}
+		status->moving=TRUE;
+	} else if (status->moving) {
+		status->moving=FALSE;
+		if (status->move_grabbed) {
+			GdkSeat *seat=gdk_display_get_default_seat(
+			    gdk_display_get_default());
+			if (seat) gdk_seat_ungrab(seat);
+			status->move_grabbed=FALSE;
+		}
+		win=view_window_get(status->view);
+		if (win)
+			gtk_window_set_gravity(win, GDK_GRAVITY_NORTH_WEST);
+	}
 	END_FUNC
 }
 gboolean status_get_moving(struct status *status) { return status->moving; }
+
+/* Live-resize: drag adjusts SCALEX/Y; click (no drag) restores launch size. */
+void status_set_resizing(struct status *status, gboolean resizing)
+{
+	START_FUNC
+	GtkWindow *win;
+	GdkWindow *gdkw;
+
+	if (resizing) {
+		if (!status->resizing) {
+			status->resize_scale0=settings_get_double(SETTINGS_SCALEX);
+			status->resize_last=status->resize_scale0;
+			status->resize_dragged=FALSE;
+			win=view_window_get(status->view);
+			if (win) {
+				/*
+				 * Pin client NW in root coords. gtk_window_get_position
+				 * can disagree with the GDK/X window under FVWM frames
+				 * and was part of the vacillation.
+				 */
+				gdkw=gtk_widget_get_window(GTK_WIDGET(win));
+				if (gdkw) {
+					gdk_window_get_origin(gdkw,
+					    &status->resize_pin_x,
+					    &status->resize_pin_y);
+					status->resize_shell_w =
+					    (guint)gdk_window_get_width(gdkw);
+					status->resize_shell_h =
+					    (guint)gdk_window_get_height(gdkw);
+				} else {
+					gtk_window_get_position(win,
+					    &status->resize_pin_x,
+					    &status->resize_pin_y);
+					status->resize_shell_w =
+					    status->view ? status->view->width : 0;
+					status->resize_shell_h =
+					    status->view ? status->view->height : 0;
+				}
+				gtk_window_set_gravity(win,
+				    GDK_GRAVITY_NORTH_WEST);
+			}
+		}
+		status->resizing=TRUE;
+	} else if (status->resizing) {
+		/* Commit while pin/scale are still valid; then clear the flag. */
+		if (status->resize_grabbed) {
+			GdkSeat *seat=gdk_display_get_default_seat(
+			    gdk_display_get_default());
+			if (seat) gdk_seat_ungrab(seat);
+			status->resize_grabbed=FALSE;
+		}
+		if (status->view) {
+			/*
+			 * Click (no drag past slop): restore cold-start size.
+			 * Drag: keep the live scale already applied.
+			 */
+			if (!status->resize_dragged &&
+			    status->resize_scale_launch > 0.0) {
+				view_live_scale(status->view,
+				    status->resize_scale_launch,
+				    status->resize_pin_x,
+				    status->resize_pin_y);
+			}
+			view_live_scale_commit(status->view);
+		}
+		status->resizing=FALSE;
+		win=view_window_get(status->view);
+		if (win)
+			gtk_window_set_gravity(win, GDK_GRAVITY_NORTH_WEST);
+	}
+	END_FUNC
+}
+gboolean status_get_resizing(struct status *status) { return status->resizing; }
 
 /* zoom the focused key */
 void status_focus_zoom_set(struct status *status, gboolean focus_zoom) { status->focus_zoom=focus_zoom; }
