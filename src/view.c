@@ -1214,8 +1214,11 @@ void view_set_keep_ratio(GSettings *settings, gchar *key, gpointer user_data)
 void view_update(struct view *view, struct key *key, gboolean statechange)
 {
 	START_FUNC
-	GdkRectangle *rect;
+	GdkRectangle live_rect;
 	GdkCursor *cursor;
+	struct keyboard *kbd;
+	gdouble x, y, w, h, xmargin, ymargin, zx, zy;
+	gboolean focus_zoom;
 
 	if (!view->window) return;
 	if (key) {
@@ -1224,11 +1227,44 @@ void view_update(struct view *view, struct key *key, gboolean statechange)
 			view->symbols=NULL;
 			gtk_widget_queue_draw(GTK_WIDGET(view->window));
 		} else {
-			rect=keyboard_key_getrect((struct keyboard *)key_get_keyboard(key),
-				key, status_focus_zoom_get(view->status));
+			/*
+			 * Damage must use the same scale as view_expose
+			 * (view->scalex/y). keyboard_key_getrect() still
+			 * multiplies by SETTINGS_SCALEX/Y; after RandR
+			 * portrait fit, view_live_scale updates only the
+			 * live scale, so settings-based damage is SE-shifted
+			 * and only ~¼ of the key highlight redraws.
+			 */
+			kbd = (struct keyboard *)key_get_keyboard(key);
+			zx = view->scalex;
+			zy = view->scaley;
+			if (zx < 1.0)
+				zx = settings_get_double(SETTINGS_SCALEX);
+			if (zy < 1.0)
+				zy = settings_get_double(SETTINGS_SCALEY);
+			x = kbd->xpos + (key->x - (key->w / 2.0));
+			y = kbd->ypos + (key->y - (key->h / 2.0));
+			w = key->w;
+			h = key->h;
+			focus_zoom = status_focus_zoom_get(view->status);
+			if (focus_zoom) {
+				xmargin = (w * zx *
+				    (settings_get_double(SETTINGS_FOCUS_ZOOM) -
+					1.0)) + 5.0;
+				ymargin = (h * zy *
+				    (settings_get_double(SETTINGS_FOCUS_ZOOM) -
+					1.0)) + 5.0;
+			} else {
+				xmargin = 5.0;
+				ymargin = 5.0;
+			}
+			live_rect.x = (gint)((x * zx) - xmargin);
+			live_rect.y = (gint)((y * zy) - ymargin);
+			live_rect.width = (gint)((w * zx) + (xmargin * 2.0));
+			live_rect.height = (gint)((h * zy) + (ymargin * 2.0));
 			gdk_window_invalidate_rect(
 				gtk_widget_get_window(GTK_WIDGET(view->window)),
-				rect, TRUE);
+				&live_rect, TRUE);
 		}
 	}
 	if (status_focus_get(view->status)) {

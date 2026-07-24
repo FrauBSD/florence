@@ -235,6 +235,7 @@ struct key_mod *key_mod_find(struct key *key, GdkModifierType mod)
 	START_FUNC
 	GSList *list=key->mods;
 	struct key_mod *keymod;
+	struct key_action *action;
 	guint score=0;
 	if (!list) flo_fatal(_("key %p has no modification."), key);
 	keymod=(struct key_mod *)list->data;
@@ -244,6 +245,16 @@ struct key_mod *key_mod_find(struct key *key, GdkModifierType mod)
 			score=mod&(((struct key_mod *)list->data)->modifier);
 		}
 		list=list->next;
+	}
+	/*
+	 * Greeter: never switch Hide (reduce) → Close on Alt. There is no
+	 * Start-menu relaunch path under XDM; quitting Florence requires zap.
+	 */
+	if (florence_in_greeter() &&
+	    keymod->type == KEY_ACTION &&
+	    (action = (struct key_action *)keymod->data) != NULL &&
+	    action->type == KEY_CLOSE) {
+		keymod = (struct key_mod *)key->mods->data;
 	}
 	END_FUNC
 	return keymod;
@@ -422,7 +433,13 @@ void key_release(struct key *key, struct status *status)
 			case KEY_ACTION:
 				action=(struct key_action *)mod->data;
 				switch (action->type) {
-					case KEY_CLOSE: g_timeout_add(20, key_terminate, (gpointer)status);
+					case KEY_CLOSE:
+						/* Belt-and-suspenders with key_mod_find. */
+						if (florence_in_greeter())
+							view_hide(status->view);
+						else
+							g_timeout_add(20, key_terminate,
+							    (gpointer)status);
 						break;
 					case KEY_REDUCE: view_hide(status->view); break;
 					case KEY_CONFIG:
@@ -535,6 +552,13 @@ void key_symbol_draw(struct key *key, struct style *style,
 		case KEY_CODE: {
 			unsigned int code = ((struct key_code *)mod->data)->code;
 			GdkModifierType gmod = status_globalmod_get(status);
+			/* Label lookup: keep Shift/Caps/Num/AltGr — strip
+			 * Ctrl/Alt/Super. F-keys are XKB type CTRL+ALT; with
+			 * Ctrl or Alt alone GDK often returns NoSymbol, and
+			 * Ctrl+Alt yields XF86Switch_VT_* with no style glyph,
+			 * so F1–F12 (and similarly BackSpace) go blank. */
+			GdkModifierType drawmod = gmod & (GDK_SHIFT_MASK |
+			    GDK_LOCK_MASK | GDK_MOD2_MASK | GDK_MOD5_MASK);
 			guint keyval = 0;
 			const char *fn_name;
 
@@ -553,8 +577,11 @@ void key_symbol_draw(struct key *key, struct style *style,
 				}
 			}
 			if (!keyval)
-				keyval = xkeyboard_getKeyval(status->xkeyboard, code,
-				    gmod & ~FLORENCE_FN_MASK);
+				keyval = xkeyboard_getKeyval(status->xkeyboard,
+				    code, drawmod);
+			if (!keyval)
+				keyval = xkeyboard_getKeyval(status->xkeyboard,
+				    code, 0);
 			style_symbol_draw(style, cairoctx, keyval, key->w, key->h);
 			break;
 		}
