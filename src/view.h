@@ -101,11 +101,9 @@ struct key *view_hit_get (struct view *view, gint x, gint y);
 #endif
 /* get gtk window of the view */
 GtkWindow *view_window_get (struct view *view);
-#ifdef FLORENCE_GREETER
-/* Suspend/restore XShape around greeter live-move and live-resize. */
+/* Suspend/restore XShape around live-move and live-resize (shape fallback). */
 void view_greeter_live_drag_begin(struct view *view);
 void view_greeter_live_drag_end(struct view *view);
-#endif
 /* Live-resize: apply scale with NW corner pinned (no GSettings spam). */
 void view_live_scale (struct view *view, gdouble scale, gint pin_x, gint pin_y);
 /* Persist scale after a live-resize drag ends. */

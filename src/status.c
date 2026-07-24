@@ -869,8 +869,16 @@ void status_set_moving(struct status *status, gboolean moving)
 			if (seat) gdk_seat_ungrab(seat);
 			status->move_grabbed=FALSE;
 		}
-		if (!status->move_dragged && status->view)
+		if (!status->move_dragged && status->view) {
 			view_restore_open_position(status->view);
+			/*
+			 * Click-restore jumps the window; leave was UNGRAB or
+			 * suppressed while moving, so the move key would stay
+			 * focused and draw highlighted until the next motion.
+			 */
+			status->pressed = NULL;
+			status->focus = NULL;
+		}
 		win=view_window_get(status->view);
 		if (win)
 			gtk_window_set_gravity(win, GDK_GRAVITY_NORTH_WEST);
@@ -940,6 +948,12 @@ void status_set_resizing(struct status *status, gboolean resizing)
 				    status->resize_scale_launch,
 				    status->resize_pin_x,
 				    status->resize_pin_y);
+				/*
+				 * Same stuck-hover case as move click-restore:
+				 * leave suppressed during resize + layout jump.
+				 */
+				status->pressed = NULL;
+				status->focus = NULL;
 			}
 			view_live_scale_commit(status->view);
 		}

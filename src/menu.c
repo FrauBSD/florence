@@ -22,6 +22,7 @@
 #include "system.h"
 #include "trace.h"
 #include "settings.h"
+#include "florence.h"
 #include <gtk/gtk.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
@@ -87,6 +88,19 @@ void menu_show(GObject *parent, guint button, GCallback quit_func,
 #ifdef ENABLE_HELP
 	GtkWidget *help;
 #endif
+
+	if (florence_in_greeter()) {
+		/* XDM greeter: never Preferences / Quit / About. */
+		(void)parent;
+		(void)button;
+		(void)quit_func;
+		(void)pos_func;
+		(void)user_data;
+		(void)time;
+		END_FUNC
+		return;
+	}
+
 	menu=gtk_menu_new();
 
 	quit=gtk_menu_item_new_with_mnemonic(_("_Quit"));

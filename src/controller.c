@@ -24,6 +24,7 @@
 #include "settings.h"
 #include "tools.h"
 #include "lib/florence.h"
+#include "florence.h"
 #include <cairo-xlib.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,7 +44,12 @@
 
 RsvgHandle *handle;
 
-#ifndef FLORENCE_GREETER
+/*
+ * gtk_widget_destroy on the float icon from our own teardown must not exit
+ * Florence. A WM Close/Destroy on the glyph (FVWM WindowOps) should.
+ */
+static gboolean controller_icon_destroy_internal = FALSE;
+
 static guint session_icon_debounce_id;
 
 static int
@@ -147,18 +153,25 @@ session_ctl_panel_xrandr(gint *px, gint *py, gint *pw, gint *ph)
 static void
 session_ctl_icon_xy(gint *ix, gint *iy)
 {
-	const char *et;
-	gint px, py, pw, ph, taskbar;
+	const char *et, *em;
+	gint px, py, pw, ph, taskbar, margin;
 
 	if (!session_ctl_panel_xrandr(&px, &py, &pw, &ph)) {
 		*ix = settings_get_int(SETTINGS_CONTROLLER_ICON_XPOS);
 		*iy = settings_get_int(SETTINGS_CONTROLLER_ICON_YPOS);
 		return;
 	}
-	et = getenv("FLORENCE_TASKBAR_H");
-	taskbar = (et && atoi(et) > 0) ? atoi(et) : SESSION_TASKBAR_H;
-	*ix = px + pw - SESSION_ICON_W - SESSION_ICON_MARGIN;
-	*iy = py + ph - taskbar - SESSION_ICON_H - SESSION_ICON_MARGIN;
+	em = getenv("FLORENCE_ICON_MARGIN");
+	margin = (em && atoi(em) > 0) ? atoi(em) : SESSION_ICON_MARGIN;
+	if (florence_in_greeter()) {
+		/* No Start bar on the XDM greeter. */
+		taskbar = 0;
+	} else {
+		et = getenv("FLORENCE_TASKBAR_H");
+		taskbar = (et && atoi(et) > 0) ? atoi(et) : SESSION_TASKBAR_H;
+	}
+	*ix = px + pw - SESSION_ICON_W - margin;
+	*iy = py + ph - taskbar - SESSION_ICON_H - margin;
 	if (*ix < px)
 		*ix = px;
 	if (*iy < py)
@@ -216,7 +229,6 @@ session_ctl_watch_monitors(struct controller *controller)
 	g_signal_connect(screen, "size-changed",
 	    G_CALLBACK(session_ctl_on_monitors_changed), controller);
 }
-#endif
 
 /* on expose event: display florence icon */
 void controller_icon_expose (GtkWidget *window, cairo_t* context, void *userdata)
@@ -446,10 +458,23 @@ void controller_icon_on_press (GtkWidget *window, GdkEventButton *event, gpointe
 {
 	START_FUNC
 	struct controller *controller=(struct controller *)user_data;
-	/* right click */
+	GdkWindow *gdkw;
+	GdkSeat *seat;
+
 	controller->icon_moving=CONTROLLER_PRESSED;
-	controller->xpos=(gint)((GdkEventMotion*)event)->x;
-	controller->ypos=(gint)((GdkEventMotion*)event)->y;
+	controller->xpos=(gint)event->x;
+	controller->ypos=(gint)event->y;
+	if (florence_in_greeter()) {
+		/*
+		 * Greeter glyph does not drag-move; grab so release-out still
+		 * delivers release (touch often clamps widget-local coords).
+		 */
+		gdkw=gtk_widget_get_window(window);
+		seat=gdk_display_get_default_seat(gdk_display_get_default());
+		if (gdkw && seat)
+			gdk_seat_grab(seat, gdkw, GDK_SEAT_CAPABILITY_ALL_POINTING,
+			    FALSE, NULL, (GdkEvent *)event, NULL, NULL);
+	}
 	END_FUNC
 }
 
@@ -458,6 +483,43 @@ void controller_icon_on_release (GtkWidget *window, GdkEventButton *event, gpoin
 {
 	START_FUNC
 	struct controller *controller=(struct controller *)user_data;
+	GtkAllocation alloc;
+	GdkWindow *gdkw;
+	GdkSeat *seat;
+	gboolean inside;
+	gint ox, oy, lx, ly;
+
+	if (florence_in_greeter()) {
+		seat=gdk_display_get_default_seat(gdk_display_get_default());
+		if (seat)
+			gdk_seat_ungrab(seat);
+
+		if (controller->icon_moving==CONTROLLER_IMMOBILE) {
+			END_FUNC
+			return;
+		}
+
+		gtk_widget_get_allocation(window, &alloc);
+		gdkw=gtk_widget_get_window(window);
+		if (gdkw) {
+			gdk_window_get_origin(gdkw, &ox, &oy);
+			lx=(gint)event->x_root - ox;
+			ly=(gint)event->y_root - oy;
+		} else {
+			lx=(gint)event->x;
+			ly=(gint)event->y;
+		}
+		inside = (lx >= 0 && ly >= 0 &&
+		    lx < alloc.width && ly < alloc.height);
+
+		/* No right-click menu on the XDM greeter. */
+		if (inside && event->button!=3)
+			florence_toggle();
+		controller->icon_moving=CONTROLLER_IMMOBILE;
+		END_FUNC
+		return;
+	}
+
 	if (controller->icon_moving==CONTROLLER_PRESSED) {
 		if (event->button==3) florence_menu(event->time);
 		else florence_toggle();
@@ -466,12 +528,50 @@ void controller_icon_on_release (GtkWidget *window, GdkEventButton *event, gpoin
 	END_FUNC
 }
 
-/* on move event: move the icon. */
+/*
+ * FVWM WindowOps Close/Destroy on the float glyph: tear down the whole
+ * session Florence (keyboard + glyph), not just the icon window.
+ */
+static void
+controller_icon_on_destroy(GtkWidget *window, gpointer user_data)
+{
+	struct controller *controller=(struct controller *)user_data;
+
+	if (controller && controller->controller_icon == GTK_WINDOW(window))
+		controller->controller_icon=NULL;
+	if (controller_icon_destroy_internal)
+		return;
+	if (florence_in_greeter())
+		return;
+	florence_hide();
+	florence_terminate();
+}
+
+static gboolean
+controller_icon_on_delete(GtkWidget *window, GdkEvent *event, gpointer user_data)
+{
+	(void)window;
+	(void)event;
+	(void)user_data;
+	/* Default destroy path; destroy handler exits Florence. */
+	return FALSE;
+}
+
+/* on move event: move the icon (session only; greeter glyph is fixed). */
 void controller_icon_on_move (GtkWidget *window, GdkEventButton *event, gpointer user_data)
 {
 	START_FUNC
 	struct controller *controller=(struct controller *)user_data;
 	gint x, y, dx, dy;
+
+	if (florence_in_greeter()) {
+		(void)window;
+		(void)event;
+		(void)user_data;
+		END_FUNC
+		return;
+	}
+
 	gdk_device_get_position(gdk_device_manager_get_client_pointer(
 		gdk_display_get_device_manager(gdk_display_get_default())), NULL, &x, &y);
 	switch(controller->icon_moving) {
@@ -527,13 +627,21 @@ void controller_float_icon (struct controller *controller)
 				G_CALLBACK(controller_icon_on_move), controller);
 			g_signal_connect(G_OBJECT(controller->controller_icon), "leave-notify-event",
 				G_CALLBACK(controller_icon_on_move), controller);
+			g_signal_connect(G_OBJECT(controller->controller_icon), "delete-event",
+				G_CALLBACK(controller_icon_on_delete), controller);
+			g_signal_connect(G_OBJECT(controller->controller_icon), "destroy",
+				G_CALLBACK(controller_icon_on_destroy), controller);
 		}
 		gtk_widget_show(GTK_WIDGET(controller->controller_icon));
 		gtk_window_move(GTK_WINDOW(controller->controller_icon),
 			settings_get_int(SETTINGS_CONTROLLER_ICON_XPOS),
 			settings_get_int(SETTINGS_CONTROLLER_ICON_YPOS));
 	} else {
-		if (controller->controller_icon) gtk_widget_destroy(GTK_WIDGET(controller->controller_icon));
+		if (controller->controller_icon) {
+			controller_icon_destroy_internal=TRUE;
+			gtk_widget_destroy(GTK_WIDGET(controller->controller_icon));
+			controller_icon_destroy_internal=FALSE;
+		}
 		controller->controller_icon=NULL;
 	}
 }
@@ -606,7 +714,11 @@ void controller_free(struct controller *controller)
 	controller->autohide_icon=NULL;
 	atspi_exit();
 #endif
-	if (controller->controller_icon) gtk_widget_destroy(GTK_WIDGET(controller->controller_icon));
+	if (controller->controller_icon) {
+		controller_icon_destroy_internal=TRUE;
+		gtk_widget_destroy(GTK_WIDGET(controller->controller_icon));
+		controller_icon_destroy_internal=FALSE;
+	}
 	controller->controller_icon=NULL;
 
 	g_free(controller);

@@ -24,6 +24,8 @@
 #include "trace.h"
 #include "settings.h"
 #include "status.h"
+#include "view.h"
+#include "florence.h"
 #include <math.h>
 #include <string.h>
 #include <gdk/gdkx.h>
@@ -341,8 +343,14 @@ void key_press(struct key *key, struct status *status)
 				action=(struct key_action *)mod->data;
 				switch (action->type) {
 					/* Always Florence live-move + seat grab (see florence.c). */
-					case KEY_MOVE: status_set_moving(status, TRUE); break;
-					case KEY_RESIZE: status_set_resizing(status, TRUE); break;
+					case KEY_MOVE:
+						status_set_moving(status, TRUE);
+						view_greeter_live_drag_begin(status->view);
+						break;
+					case KEY_RESIZE:
+						status_set_resizing(status, TRUE);
+						view_greeter_live_drag_begin(status->view);
+						break;
 					case KEY_FN:
 						/* Sticky layer only — no X event. */
 						break;
@@ -417,9 +425,18 @@ void key_release(struct key *key, struct status *status)
 					case KEY_CLOSE: g_timeout_add(20, key_terminate, (gpointer)status);
 						break;
 					case KEY_REDUCE: view_hide(status->view); break;
-					case KEY_CONFIG: settings(); break;
-					case KEY_MOVE: status_set_moving(status, FALSE); break;
-					case KEY_RESIZE: status_set_resizing(status, FALSE); break;
+					case KEY_CONFIG:
+						if (!florence_in_greeter())
+							settings();
+						break;
+					case KEY_MOVE:
+						status_set_moving(status, FALSE);
+						view_greeter_live_drag_end(status->view);
+						break;
+					case KEY_RESIZE:
+						status_set_resizing(status, FALSE);
+						view_greeter_live_drag_end(status->view);
+						break;
 					case KEY_FN:
 						break;
 					/*

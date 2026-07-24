@@ -28,6 +28,7 @@
 #include "tools.h"
 #include "fsm.h"
 #include "key.h"
+#include "florence.h"
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
 #include <cairo/cairo-xlib.h>
@@ -173,6 +174,13 @@ session_builtin_panel(gint *px, gint *py, gint *pw, gint *ph)
 	ey = getenv("FLORENCE_PANEL_Y");
 	ew = getenv("FLORENCE_PANEL_W");
 	eh = getenv("FLORENCE_PANEL_H");
+	if (!(ex && ey && ew && eh)) {
+		/* florence-greeter-start exports these. */
+		ex = getenv("FLORENCE_GREETER_PANEL_X");
+		ey = getenv("FLORENCE_GREETER_PANEL_Y");
+		ew = getenv("FLORENCE_GREETER_PANEL_W");
+		eh = getenv("FLORENCE_GREETER_PANEL_H");
+	}
 	if (ex && ey && ew && eh) {
 		*px = atoi(ex);
 		*py = atoi(ey);
@@ -374,12 +382,16 @@ session_place_keyboard(struct view *view)
 			margin = 24;
 	}
 	et = getenv("FLORENCE_TASKBAR_H");
-	taskbar = (et && atoi(et) > 0) ? atoi(et) : SESSION_TASKBAR_DEFAULT;
+	if (florence_in_greeter())
+		taskbar = 0; /* XDM greeter has no Start bar. */
+	else
+		taskbar = (et && atoi(et) > 0) ? atoi(et) : SESSION_TASKBAR_DEFAULT;
 	/*
 	 * Landscape: sit just above the taskbar (glyph is corner-only).
 	 * Portrait: also clear the float glyph so the OSK does not cover it.
+	 * Greeter: always clear the glyph (no taskbar).
 	 */
-	if (pw < ph)
+	if (florence_in_greeter() || pw < ph)
 		bottom_clear = margin + SESSION_GLYPH_H + SESSION_GLYPH_MARGIN +
 		    taskbar;
 	else
@@ -552,6 +564,17 @@ void view_show (struct view *view)
 void view_hide (struct view *view)
 {
 	START_FUNC
+	/*
+	 * Drop hover/press highlight before unmap. Hide often delivers
+	 * LeaveNotify with GDK_CROSSING_UNGRAB (ignored by flo_mouse_leave
+	 * to avoid compositor flicker), and status_focus_set(NULL) refuses
+	 * while pressed is still set mid-release — so the reduce/close key
+	 * stayed focused and drew highlighted when the glyph reopened.
+	 */
+	if (view && view->status) {
+		view->status->pressed = NULL;
+		view->status->focus = NULL;
+	}
 	gtk_widget_hide(GTK_WIDGET(view->window));
 	END_FUNC
 }
@@ -612,6 +635,86 @@ void view_resize (struct view *view)
 		gdk_window_invalidate_rect(gtk_widget_get_window(GTK_WIDGET(view->window)), &rect, TRUE);
 	}
 	END_FUNC
+}
+
+/*
+ * Live-move / live-resize: with a compositor, redraw only. XShape suspend /
+ * opaque wipe remains only as a fallback when transparent && !composite.
+ */
+static int view_shape_drag_suspended;
+static guint view_shape_drag_resume_id;
+
+static int
+view_needs_shape_fallback(struct view *view)
+{
+	return view && !view->composite &&
+	    settings_get_bool(SETTINGS_TRANSPARENT);
+}
+
+static void
+view_shape_drag_suspend(struct view *view)
+{
+	Display *disp;
+	GdkWindow *gdkw;
+	GdkRGBA black = { 0.0, 0.0, 0.0, 1.0 };
+
+	if (view_shape_drag_suspended || !view_needs_shape_fallback(view) ||
+	    !view->window)
+		return;
+	gdkw = gtk_widget_get_window(GTK_WIDGET(view->window));
+	if (!gdkw)
+		return;
+	if (view_shape_drag_resume_id) {
+		g_source_remove(view_shape_drag_resume_id);
+		view_shape_drag_resume_id = 0;
+	}
+	disp = (Display *)gdk_x11_get_default_xdisplay();
+	XShapeCombineMask(disp, GDK_WINDOW_XID(gdkw), ShapeBounding, 0, 0, 0,
+	    ShapeSet);
+	gdk_window_set_background_rgba(gdkw, &black);
+	view_shape_drag_suspended = 1;
+}
+
+static void
+view_shape_drag_resume(struct view *view)
+{
+	if (!view_shape_drag_suspended || !view)
+		return;
+	view_shape_drag_suspended = 0;
+	view_create_window_mask(view);
+}
+
+static gboolean
+view_shape_drag_resume_idle(gpointer data)
+{
+	struct view *view = (struct view *)data;
+
+	view_shape_drag_resume_id = 0;
+	if (!view || !view->window)
+		return FALSE;
+	if (view->status &&
+	    (status_get_resizing(view->status) || status_get_moving(view->status)))
+		return FALSE;
+	view_shape_drag_resume(view);
+	return FALSE;
+}
+
+void
+view_greeter_live_drag_begin(struct view *view)
+{
+	view_shape_drag_suspend(view);
+	if (view && view->window)
+		gtk_widget_queue_draw(GTK_WIDGET(view->window));
+}
+
+void
+view_greeter_live_drag_end(struct view *view)
+{
+	if (view_shape_drag_resume_id) {
+		g_source_remove(view_shape_drag_resume_id);
+		view_shape_drag_resume_id = 0;
+	}
+	view_shape_drag_resume(view);
 }
 
 /*

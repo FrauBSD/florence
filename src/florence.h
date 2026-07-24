@@ -36,6 +36,10 @@
 #include "service.h"
 #include "controller.h"
 
+/* XDM greeter mode: same binary, safer UI (no prefs/menu). */
+void florence_set_greeter_mode(gboolean on);
+gboolean florence_in_greeter(void);
+
 /* There is one florence structure which contains all global data in florence.c */
 struct florence {
 	struct style *style; /* the style of florence */
@@ -48,6 +52,7 @@ struct florence {
 	struct ramble *ramble; /* track the path of the mouse. */
 #endif
 	struct service *service; /* dbus service object */
+	guint to_top_id; /* keep-on-top poll source (0 if none) */
 };
 
 /* create a new instance of florence. */

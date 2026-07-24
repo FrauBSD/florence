@@ -29,6 +29,20 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
 
+static gboolean florence_greeter_mode = FALSE;
+
+void
+florence_set_greeter_mode(gboolean on)
+{
+	florence_greeter_mode = on ? TRUE : FALSE;
+}
+
+gboolean
+florence_in_greeter(void)
+{
+	return florence_greeter_mode;
+}
+
 /* terminate the program */
 void flo_terminate(struct florence *florence)
 {

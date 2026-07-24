@@ -20,6 +20,8 @@
 */
 
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <getopt.h>
 #include <gtk/gtk.h>
@@ -67,6 +69,7 @@ static struct option const long_options[] =
 	{"debug", optional_argument, 0, 'd'},
 	{"focus", optional_argument, 0, 'f'},
 	{"use-config", required_argument, 0, 'u'},
+	{"greeter", no_argument, 0, 'G'},
 	{NULL, 0, NULL, 0}
 };
 
@@ -93,6 +96,7 @@ int main (int argc, char **argv)
 	int config;
 	struct controller *controller;
 	char buf;
+	const char *base;
 
 	setlocale (LC_ALL, "");
 	bindtextdomain (GETTEXT_PACKAGE, FLORENCELOCALEDIR);
@@ -100,6 +104,18 @@ int main (int argc, char **argv)
 	textdomain (GETTEXT_PACKAGE);
 
 	program_name=argv[0];
+	/*
+	 * Greeter mode: --greeter / -G, argv0 florence-greeter, or
+	 * FLORENCE_GREETER=1 (start scripts). Must be set before flo_new.
+	 */
+	base = strrchr(argv[0], '/');
+	base = base ? base + 1 : argv[0];
+	if (getenv("FLORENCE_GREETER") && *getenv("FLORENCE_GREETER") &&
+	    strcmp(getenv("FLORENCE_GREETER"), "0") != 0)
+		florence_set_greeter_mode(TRUE);
+	else if (base && strcmp(base, "florence-greeter") == 0)
+		florence_set_greeter_mode(TRUE);
+
 	config=decode_switches (argc, argv);
 	if (!(config&2)&&getenv("FLO_DEBUG"))
 		debug_level=trace_parse_level(getenv("FLO_DEBUG"));
@@ -114,6 +130,11 @@ int main (int argc, char **argv)
 		gtk_init(&argc, &argv);
 		exec_command();
 	} else if (config&1) {
+		if (florence_in_greeter()) {
+			flo_error(_("Configuration UI is disabled in greeter mode."));
+			END_FUNC
+			return EXIT_FAILURE;
+		}
 		gtk_init(&argc, &argv);
 		settings_init(TRUE, config_file);
 		settings();
@@ -236,7 +257,8 @@ static int decode_switches (int argc, char **argv)
 		"D:"   /* debounce */
 		"f::"  /* restore focus */
 		"t"    /* keep bringing back to front */
-		"u:",  /* use config file */
+		"u:"   /* use config file */
+		"G",   /* greeter mode */
 		long_options, (int *) 0)) != EOF)
 	{
 		switch (c)
@@ -247,6 +269,7 @@ static int decode_switches (int argc, char **argv)
 			case 'h':usage (0);
 			/* no break */
 			case 'c':ret|=1; break;
+			case 'G':florence_set_greeter_mode(TRUE); break;
 			case 'D':d=strtoul(optarg, NULL, 0);
 				if (d!=ULONG_MAX)
 					debounce=d;
@@ -286,7 +309,8 @@ Options:\n\
   -d, --debug [level]       print debug information to stdout\n\
   -D, --debounce time       prevent bounce with some applications\n\
   -f, --focus [window]      give the focus to the window\n\
-  -u, --use-config file     use the given config file instead of dconf\n\n\
+  -u, --use-config file     use the given config file instead of dconf\n\
+  -G, --greeter             XDM greeter mode (no prefs/menu; safer glyph)\n\n\
 Available commands are:\n\
   show                      show the keyboard.\n\
   hide                      hide the keyboard.\n\
