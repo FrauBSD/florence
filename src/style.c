@@ -325,30 +325,69 @@ void style_draw_text(struct style *style, cairo_t *cairoctx, gchar *text, gdoubl
 	END_FUNC
 }
 
+/* Find a named style symbol (exact, then XF86-prefixed if needed). */
+static GSList *
+style_symbol_find_by_name(struct style *style, const gchar *name)
+{
+	GSList *item;
+
+	if (!name)
+		return NULL;
+	item = style->symbols;
+	while (item && !style_symbol_matches((struct symbol *)item->data,
+	    (gchar *)name))
+		item = g_slist_next(item);
+	/*
+	 * GDK often strips the XF86 prefix from keyval names; our style
+	 * entries keep it. Also accept the reverse (caller already has XF86*).
+	 */
+	if (!item && strncmp(name, "XF86", 4) != 0) {
+		gchar *xf86 = g_strdup_printf("XF86%s", name);
+
+		item = style->symbols;
+		while (item && !style_symbol_matches((struct symbol *)item->data,
+		    xf86))
+			item = g_slist_next(item);
+		g_free(xf86);
+	}
+	return item;
+}
+
+static void
+style_symbol_item_draw(struct style *style, cairo_t *cairoctx, GSList *item,
+	gdouble w, gdouble h)
+{
+	if (((struct symbol *)item->data)->label)
+		style_draw_text(style, cairoctx,
+		    ((struct symbol *)item->data)->label, w, h);
+	else
+		style_render_svg(cairoctx, ((struct symbol *)item->data)->svg,
+		    w, h, TRUE, NULL);
+}
+
+/* Draw by style symbol name (Fn-layer icons must not depend on GDK keyvals). */
+void
+style_symbol_draw_name(struct style *style, cairo_t *cairoctx, const gchar *name,
+	gdouble w, gdouble h)
+{
+	START_FUNC
+	GSList *item = style_symbol_find_by_name(style, name);
+
+	if (item)
+		style_symbol_item_draw(style, cairoctx, item, w, h);
+	END_FUNC
+}
+
 /* Draw the symbol represented by keyval */
 void style_symbol_draw(struct style *style, cairo_t *cairoctx, guint keyval, gdouble w, gdouble h)
 {
 	START_FUNC
-	GSList *item=style->symbols;
+	GSList *item;
 	gchar name[7];
 	guint keyval2=keyval;
 	const gchar *kvname=gdk_keyval_name(keyval);
 
-	while (item && !style_symbol_matches((struct symbol *)item->data, (gchar *)kvname)) {
-		item=g_slist_next(item);
-	}
-	/*
-	 * GDK returns AudioMute / Display / … for XF86* keyvals. Our symbols
-	 * are often stored under the XF86-prefixed name — try that next.
-	 */
-	if (!item && kvname && strncmp(kvname, "XF86", 4) != 0) {
-		gchar *xf86=g_strdup_printf("XF86%s", kvname);
-		item=style->symbols;
-		while (item && !style_symbol_matches((struct symbol *)item->data, xf86)) {
-			item=g_slist_next(item);
-		}
-		g_free(xf86);
-	}
+	item = style_symbol_find_by_name(style, kvname);
 	/* No predifined symbol => get the label according to keyval */
 	if (!item) {
 		/* find the string representation of keyval */
@@ -360,12 +399,8 @@ void style_symbol_draw(struct style *style, cairo_t *cairoctx, guint keyval, gdo
 		if (!name[0]) name[g_unichar_to_utf8(gdk_keyval_to_unicode(keyval2), name)]='\0';
 		/* if (!name[0] && gdk_keyval_name(keyval)) { strncpy(name, gdk_keyval_name(keyval), 3); name[3]='\0'; } */
 		if (*name) style_draw_text(style, cairoctx, name, w, h);
-	/* the symbol has a label ==> let's draw it */
-	} else if (((struct symbol *)item->data)->label) {
-		style_draw_text(style, cairoctx, ((struct symbol *)item->data)->label, w, h);
-	/* the symbol must have a svg => draw it */
 	} else {
-		style_render_svg(cairoctx, ((struct symbol *)item->data)->svg, w, h, TRUE, NULL);
+		style_symbol_item_draw(style, cairoctx, item, w, h);
 	}
 	END_FUNC
 }

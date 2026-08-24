@@ -235,14 +235,31 @@ void controller_icon_expose (GtkWidget *window, cairo_t* context, void *userdata
 {
 	START_FUNC
 	gdouble w, h;
+	cairo_surface_t *surf;
+	cairo_t *cr;
+
 	w=gtk_widget_get_allocated_width(window);
 	h=gtk_widget_get_allocated_height(window);
 
-	cairo_set_source_rgba(context, 0.0, 0.0, 0.0, 0.0);
+	/*
+	 * Render the SVG to an intermediate image surface, then SOURCE it onto
+	 * the GTK draw context. Painting librsvg directly with
+	 * CAIRO_OPERATOR_SOURCE on the widget cairo_t yielded a solid theme-bg
+	 * square on some compositors; the offscreen path matches what works
+	 * offline with rsvg+cairo.
+	 */
+	surf=cairo_image_surface_create(CAIRO_FORMAT_ARGB32, (int)w, (int)h);
+	cr=cairo_create(surf);
+	cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+	cairo_paint(cr);
+	cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+	style_render_svg(cr, handle, w, h, FALSE, NULL);
+	cairo_destroy(cr);
+
 	cairo_set_operator(context, CAIRO_OPERATOR_SOURCE);
+	cairo_set_source_surface(context, surf, 0.0, 0.0);
 	cairo_paint(context);
-	cairo_set_operator(context, CAIRO_OPERATOR_SOURCE);
-	style_render_svg(context, handle, w, h, FALSE, NULL);
+	cairo_surface_destroy(surf);
 	END_FUNC
 }
 
@@ -255,6 +272,8 @@ void controller_icon_create (struct controller *controller, GtkWindow **icon, gd
 		*icon=GTK_WINDOW(gtk_window_new(GTK_WINDOW_TOPLEVEL));
 		gtk_window_set_keep_above(*icon, TRUE);
 		gtk_window_set_skip_taskbar_hint(*icon, TRUE);
+		/* Prevent GTK from filling theme background over our glyph. */
+		gtk_widget_set_app_paintable(GTK_WIDGET(*icon), TRUE);
 		rsvg_handle_get_dimensions(handle, &dim);
 		gtk_widget_set_size_request(GTK_WIDGET(*icon), dim.width, dim.height);
 		gtk_container_set_border_width(GTK_CONTAINER(*icon), 0);

@@ -570,25 +570,31 @@ void key_symbol_draw(struct key *key, struct style *style,
 			GdkModifierType drawmod = gmod & (GDK_SHIFT_MASK |
 			    GDK_LOCK_MASK | GDK_MOD2_MASK | GDK_MOD5_MASK);
 			guint keyval = 0;
-			const char *fn_name;
+			const char *fn_name = NULL;
 
+			/*
+			 * Fn-layer icons: draw by style symbol name. Do not
+			 * round-trip through gdk_keyval_from_name — XF86RFKill
+			 * resolves to VoidSymbol (0xffffff), which is non-zero
+			 * and yields a blank key; Rewind/Play/Forward names
+			 * also need not depend on GDK's XF86 catalogue.
+			 */
 			if (gmod & FLORENCE_FN_MASK) {
 				fn_name = florence_fn_symbol_name(code);
 				if (fn_name) {
-					keyval = gdk_keyval_from_name(fn_name);
-					if (!keyval && !strncmp(fn_name, "XF86", 4))
-						keyval = gdk_keyval_from_name(fn_name + 4);
+					style_symbol_draw_name(style, cairoctx,
+					    fn_name, key->w, key->h);
+					break;
 				}
-				if (!keyval) {
+				{
 					unsigned int remap = florence_fn_remap(code);
 
 					if (remap)
 						code = remap;
 				}
 			}
-			if (!keyval)
-				keyval = xkeyboard_getKeyval(status->xkeyboard,
-				    code, drawmod);
+			keyval = xkeyboard_getKeyval(status->xkeyboard,
+			    code, drawmod);
 			if (!keyval)
 				keyval = xkeyboard_getKeyval(status->xkeyboard,
 				    code, 0);

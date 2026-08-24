@@ -102,6 +102,9 @@ void style_shape_draw(struct style *style, struct shape *shape, cairo_t *cairoct
 gboolean style_shape_test(struct shape *shape, gint x, gint y, guint w, guint h);
 /* Draw the symbol represented by keyval */
 void style_symbol_draw(struct style *style, cairo_t *cairoctx, guint keyval, gdouble w, gdouble h);
+/* Draw by style symbol name (e.g. XF86AudioRewind); used for Fn-layer icons */
+void style_symbol_draw_name(struct style *style, cairo_t *cairoctx, const gchar *name,
+	gdouble w, gdouble h);
 /* Draw the symbol represented by type */
 void style_symbol_type_draw(struct style *style, cairo_t *cairoctx, enum key_action_type type, gdouble w, gdouble h);
 /* Draws text with cairo */
