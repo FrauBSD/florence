@@ -243,7 +243,6 @@ void controller_icon_expose (GtkWidget *window, cairo_t* context, void *userdata
 	cairo_paint(context);
 	cairo_set_operator(context, CAIRO_OPERATOR_SOURCE);
 	style_render_svg(context, handle, w, h, FALSE, NULL);
-	wait();
 	END_FUNC
 }
 
@@ -379,7 +378,7 @@ static gboolean debounced_focus_event (gpointer user_data)
 
 /* Called when a widget is focused.
  * Check if the widget is editable and show the keyboard or hide if not. */
-void controller_focus_event (const AtspiEvent *event, void *user_data)
+void controller_focus_event (AtspiEvent *event, void *user_data)
 {
 	START_FUNC
 	struct controller *controller=(struct controller *)user_data;

@@ -45,7 +45,9 @@ This program is not intended to be run on a command\-line\&. To add this applet 
 .sp
 Florence documentation in the GNOME help system\&.
 .sp
-Florence website: http://florence\&.sourceforge\&.net/
+Florence project home: https://github.com/FrauBSD/florence
 .SH "AUTHOR"
 .sp
 François Agrech <f\&.agrech@gmail\&.com>
+.br
+Devin Teske <dteske@FreeBSD.org> (FrauBSD continuation)

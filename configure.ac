@@ -1,4 +1,4 @@
-AC_INIT([Florence virtual keyboard], [0.7.0], [dteske@FreeBSD.org], [florence])
+AC_INIT([Florence virtual keyboard], [0.7.1], [dteske@FreeBSD.org], [florence])
 AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE(no-dist-gzip dist-bzip2)
 LT_INIT
@@ -97,6 +97,9 @@ AC_CHECK_LIB([m], [tan], AC_DEFINE(HAVE_LIBM, 1, Math lib) LIBM="-lm", AC_MSG_ER
 # X11 library
 PKG_CHECK_MODULES([X11], [x11])
 
+# XRandR (live panel geometry in view.c / controller.c)
+PKG_CHECK_MODULES([XRANDR], [xrandr])
+
 AC_SUBST(GNOME_DOCS_UTILS_CFLAGS)
 AC_SUBST(GNOME_DOCS_UTILS_LIBS)
 AC_SUBST(LIBNOTIFY_CFLAGS)
@@ -111,6 +114,8 @@ AC_SUBST(DEPS_CFLAGS)
 AC_SUBST(DEPS_LIBS)
 AC_SUBST(X11_CFLAGS)
 AC_SUBST(X11_LIBS)
+AC_SUBST(XRANDR_CFLAGS)
+AC_SUBST(XRANDR_LIBS)
 AC_SUBST(LIBM)
 
 # Checks for header files.

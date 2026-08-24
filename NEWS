@@ -3,6 +3,34 @@ the SourceForge tree stalled at 0.6.3 (2014).
 
 Changelog:
 
+2026-08-23 Devin Teske <dteske@FreeBSD.org>
+	* Version 0.7.1
+	* Fn F4/F5/F6 -> XF86AudioRewind / Play / Forward (rewind, play/pause,
+	  fast-forward)
+	* Fn F10/F11 -> XF86RFKill / Print (airplane mode, screenshot)
+	* Fn-layer symbol artwork for those keys
+	* About dialog: FrauBSD project home, dual copyright, credits
+	* Build: stop vendoring docs/florence.1 and docs/florence_applet.1;
+	  configure writes them from docs/*.1.in (with or without --with-docs)
+	* Build: distclean leaves vendored payloads in place (sounds.xml,
+	  fr/florence.xml, ru/florence.xml); removes autom4te.cache
+	* Build: distclean implies clean (top, data/, styles/ Makefiles run
+	  clean then local distclean-am; no need for "gmake clean distclean")
+	* Build: configure uses unversioned aclocal/automake (no automake-1.14
+	  pin) for current FreeBSD autotools
+	* Fix: Preferences crashed opening (Relax-NG rejected resize/fn layout
+	  actions; sync florence.rng with florence.rnc)
+	* Build: PKG_CHECK_MODULES(xrandr); link via XRANDR_LIBS (includes
+	  -L… -lXrandr). Ports no longer need LDFLAGS+= -lXrandr
+	* Build: shipped configure is 0.7.1 with dteske@FreeBSD.org bugreport
+	  (no post-patch reinplace of 0.6.3 / f.agrech@gmail.com)
+	* Fix: remove spurious wait() from session-icon draw handler
+	  (SourceForge 0.6.3 baggage; implicit declaration was warning-only; no
+	  child to reap)
+	* Fix: AT-SPI focus callback signature for modern at-spi2 (source
+	  builds no longer need -Wno-error=incompatible-function-pointer-types;
+	  the FreeBSD port used that flag for 0.7.0)
+
 2026-07-23 Devin Teske <dteske@FreeBSD.org>
 	* Version 0.7.0
 	* Canonical tree moved to https://github.com/FrauBSD/florence
@@ -12,7 +40,7 @@ Changelog:
 	* Move: WM drag (mouse) vs seat-grab (touch)
 	* Session placement above taskbar; RandR portrait fit / landscape
 	  restore
-	* Framework-style Fn row (⅔-height F-keys, Esc placement, KEY_FN)
+	* Framework-style Fn row (2/3-height F-keys, Esc placement, KEY_FN)
 	* Unified greeter binary (--greeter / argv0); prefs Close /
 	  --export-dynamic and related dialog fixes
 	* Fn-layer XF86 media / brightness / display / gear symbols

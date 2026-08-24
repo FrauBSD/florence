@@ -7,5 +7,4 @@ sounds_DATA=press.ogg release.ogg return_press.ogg return_release.ogg\
 	modifier_press.ogg modifier_release.ogg $(sounds_in_files:.xml.in=.xml)
 
 EXTRA_DIST = $(sounds_DATA) $(sounds_in_files)
-DISTCLEANFILES = $(sounds_in_files:.xml.in=.xml)
 

@@ -64,8 +64,8 @@ static const gchar *key_actions[] = {
 
 /*
  * Fn-layer remaps (evdev keycodes). Matches Framework hardware Fn row and
- * ~/.xbindkeysrc (volume-osd / brightness-osd / display-mirror / screenshot /
- * audio-output-toggle).
+ * ~/.xbindkeysrc / menu-hotkeys (volume-osd / brightness-osd / mpris-control /
+ * display-mirror / airplane-mode / screenshot / audio-output-toggle).
  */
 static unsigned int
 florence_fn_remap(unsigned int code)
@@ -74,9 +74,14 @@ florence_fn_remap(unsigned int code)
 	case 67: return 121;	/* F1  → XF86AudioMute */
 	case 68: return 122;	/* F2  → XF86AudioLowerVolume */
 	case 69: return 123;	/* F3  → XF86AudioRaiseVolume */
+	case 70: return 176;	/* F4  → XF86AudioRewind */
+	case 71: return 172;	/* F5  → XF86AudioPlay (pause on shift) */
+	case 72: return 216;	/* F6  → XF86AudioForward */
 	case 73: return 232;	/* F7  → XF86MonBrightnessDown */
 	case 74: return 233;	/* F8  → XF86MonBrightnessUp */
 	case 75: return 235;	/* F9  → XF86Display (mirror) */
+	case 76: return 255;	/* F10 → XF86RFKill (airplane) */
+	case 95: return 107;	/* F11 → Print (screenshot) */
 	case 96: return 234;	/* F12 → XF86AudioMedia (audio-output-toggle/osd) */
 	default: return 0;
 	}
@@ -90,9 +95,14 @@ florence_fn_symbol_name(unsigned int fcode)
 	case 67: return "XF86AudioMute";
 	case 68: return "XF86AudioLowerVolume";
 	case 69: return "XF86AudioRaiseVolume";
+	case 70: return "XF86AudioRewind";
+	case 71: return "XF86AudioPlay";
+	case 72: return "XF86AudioForward";
 	case 73: return "XF86MonBrightnessDown";
 	case 74: return "XF86MonBrightnessUp";
 	case 75: return "XF86Display";
+	case 76: return "XF86RFKill";
+	case 95: return "Print";
 	case 96: return "XF86AudioMedia";
 	default: return NULL;
 	}

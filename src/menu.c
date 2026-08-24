@@ -32,30 +32,35 @@ void menu_about(void)
 	START_FUNC
 	gchar *authors[] = {
 		"François Agrech <f.agrech@gmail.com>",
+		"Devin Teske <dteske@FreeBSD.org>",
 		"Pietro Pilolli <alpha@paranoici.org>",
        		"Arnaud Andoval <arnaudsandoval@gmail.com>",
 		"Stéphane Ancelot <sancelot@free.fr>",
 		"Laurent Bessard <laurent.bessard@gmail.com>", NULL};
 	gtk_show_about_dialog(NULL, "program-name", _("Florence Virtual Keyboard"),
-		"version", VERSION, "copyright", _("Copyright (C) 2012 François Agrech"),
+		"version", VERSION,
+		"copyright", _("Copyright (C) 2008-2012 François Agrech\n"
+		    "Copyright (C) 2026 Devin Teske"),
 		"logo", gdk_pixbuf_new_from_file(ICONDIR "/florence.svg", NULL),
-		"website", "http://florence.sourceforge.net",
+		"website", "https://github.com/FrauBSD/florence",
+		"website-label", _("Project home"),
 		"authors", authors,
-		"license", _("Copyright (C) 2012 François Agrech\n\
-\n\
-This program is free software; you can redistribute it and/or modify\n\
-it under the terms of the GNU General Public License as published by\n\
-the Free Software Foundation; either version 2, or (at your option)\n\
-any later version.\n\
-\n\
-This program is distributed in the hope that it will be useful,\n\
-but WITHOUT ANY WARRANTY; without even the implied warranty of\n\
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n\
-GNU General Public License for more details.\n\
-\n\
-You should have received a copy of the GNU General Public License\n\
-along with this program; if not, write to the Free Software Foundation,\n\
-Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA."),
+		"license", _("Copyright (C) 2008-2012 François Agrech\n"
+		    "Copyright (C) 2026 Devin Teske\n"
+		    "\n"
+		    "This program is free software; you can redistribute it and/or modify\n"
+		    "it under the terms of the GNU General Public License as published by\n"
+		    "the Free Software Foundation; either version 2, or (at your option)\n"
+		    "any later version.\n"
+		    "\n"
+		    "This program is distributed in the hope that it will be useful,\n"
+		    "but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
+		    "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
+		    "GNU General Public License for more details.\n"
+		    "\n"
+		    "You should have received a copy of the GNU General Public License\n"
+		    "along with this program; if not, write to the Free Software Foundation,\n"
+		    "Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA."),
 		NULL);
 	END_FUNC
 }

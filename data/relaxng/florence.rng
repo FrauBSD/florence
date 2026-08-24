@@ -169,6 +169,8 @@
         <value>reduce</value>
         <value>config</value>
         <value>move</value>
+        <value>resize</value>
+        <value>fn</value>
         <value>bigger</value>
         <value>smaller</value>
         <value>switch</value>

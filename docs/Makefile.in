@@ -931,7 +931,12 @@ all:							\
 clean-doc-omf: ; rm -f $(_DOC_OMF_DB) $(_DOC_OMF_HTML)
 clean-doc-dsk: ; rm -f $(_DOC_DSK_DB) $(_DOC_DSK_HTML)
 clean-doc-lc:
-	rm -f $(_DOC_LC_DOCS)
+	@list='$(_DOC_LC_DOCS)'; for doc in $$list; do \
+	  if ! test "$$doc" -ef "$(srcdir)/$$doc"; then \
+	    echo "rm -f $$doc"; \
+	    rm -f "$$doc"; \
+	  fi; \
+	done
 	rm -f $(_DOC_MOFILES)
 	@list='$(_DOC_POFILES)'; for po in $$list; do \
 	  if ! test "$$po" -ef "$(srcdir)/$$po"; then \

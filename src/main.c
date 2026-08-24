@@ -315,8 +315,8 @@ Available commands are:\n\
   show                      show the keyboard.\n\
   hide                      hide the keyboard.\n\
   move x,y                  move the keyboard at x,y position on the screen.\n\n\
-Report bugs to <f.agrech@gmail.com>.\n\
-More informations at <http://florence.sourceforge.net>.\n\n"));
+Report bugs to <dteske@FreeBSD.org>.\n\
+Project home: <https://github.com/FrauBSD/florence>.\n\n"));
 	exit (status);
 }
 

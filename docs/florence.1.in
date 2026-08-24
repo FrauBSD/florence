@@ -8,7 +8,7 @@
 .\" the Free Software Foundation; either version 2, or (at your option)
 .\" any later version.
 .\"
-.TH "FLORENCE" "1" "July 24, 2026" "Florence 0.7.0" "General Commands Manual"
+.TH "FLORENCE" "1" "August 23, 2026" "Florence 0.7.1" "General Commands Manual"
 .SH NAME
 florence \- extensible scalable virtual keyboard for X11
 .SH SYNOPSIS

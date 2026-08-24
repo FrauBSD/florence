@@ -583,7 +583,7 @@ clean: clean-recursive
 
 clean-am: clean-generic clean-libtool mostlyclean-am
 
-distclean: distclean-recursive
+distclean: clean distclean-recursive distclean-am
 	-rm -f Makefile
 distclean-am: clean-am distclean-generic distclean-tags
 
