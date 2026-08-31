@@ -3,6 +3,21 @@ the SourceForge tree stalled at 0.6.3 (2014).
 
 Changelog:
 
+2026-08-31 Devin Teske <dteske@FreeBSD.org>
+	* Version 0.7.2
+	* Fix: stock style.rng rejected resize/fn/switch symbol types (XInclude
+	  of symbols.xml); cold start FATAL for anyone without a home-theme
+	  style.rng override — the failure jrm hit on D58428
+	* Fix: fatal-help address is dteske@FreeBSD.org (was f.agrech@gmail.com)
+	* Fix: treat compactfn and standardfn as the same Function-keys
+	  extension so prefs / GSettings survive layout switches
+	* Fix: live-resize baselines view->scalex (not stored SCALEX) so the
+	  first drag frame no longer shrinks after RandR / session fit
+	* Layout: standardnv adds PrtSc / ScrLk / Pause above Ins/Home/PgUp
+	  (arrows stay coplanar with the Ctrl row)
+	* Build: regenerate sounds.xml whenever Makefile changes so FreeBSD
+	  PREFIX=/usr/local is not stuck with a Linux /usr/share SNDDIR
+
 2026-08-23 Devin Teske <dteske@FreeBSD.org>
 	* Version 0.7.1
 	* Fn F4/F5/F6 -> XF86AudioRewind / Play / Forward (rewind, play/pause,

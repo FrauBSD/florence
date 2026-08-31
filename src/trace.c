@@ -127,7 +127,7 @@ void flo_fatal(char *s, ...)
 	va_end(ap);
 	if (!g_getenv("FLO_DEBUG") || strcmp(g_getenv("FLO_DEBUG"), "1")) {
 		g_fprintf(stderr, _("If you need help, please rerun with the -d switch (debug)\n"));
-		g_fprintf(stderr, _("and send the output to f.agrech@gmail.com\n\n"));
+		g_fprintf(stderr, _("and send the output to dteske@FreeBSD.org\n\n"));
 	}
         exit(EXIT_FAILURE);
 }

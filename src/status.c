@@ -896,7 +896,16 @@ void status_set_resizing(struct status *status, gboolean resizing)
 
 	if (resizing) {
 		if (!status->resizing) {
-			status->resize_scale0=settings_get_double(SETTINGS_SCALEX);
+			/*
+			 * Baseline the live view scale, not GSettings. Portrait
+			 * fit / session placement can leave view->scalex ahead of
+			 * (or behind) the stored SCALEX; starting from settings
+			 * then made the first drag frame shrink before growing.
+			 */
+			if (status->view && status->view->scalex >= 10.0)
+				status->resize_scale0=status->view->scalex;
+			else
+				status->resize_scale0=settings_get_double(SETTINGS_SCALEX);
 			status->resize_last=status->resize_scale0;
 			status->resize_dragged=FALSE;
 			win=view_window_get(status->view);

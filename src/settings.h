@@ -146,6 +146,13 @@ void settings_set_int(enum settings_item item, gint value);
 gchar *settings_get_string(enum settings_item item);
 /* set a GSettings string */
 void settings_set_string(enum settings_item item, const gchar *value);
+/*
+ * True if two extension ids name the same chrome. compactfn (compact layout)
+ * and standardfn (florence layout) both mean "Function keys".
+ */
+gboolean settings_extension_id_equal(const gchar *a, const gchar *b);
+/* Alias of an extension id, or NULL if it has none. */
+const gchar *settings_extension_id_alias(const gchar *id);
 /* get a GSettings boolean */
 gboolean settings_get_bool(enum settings_item item);
 /* set a GSettings boolean */

@@ -373,35 +373,51 @@
 	<keyboard>
 	<width>6</width>
 	<height>10</height>
+	<!-- PrtSc / ScrLk / Pause above Ins / Home / PgUp; arrows coplanar with Ctrl row -->
+	<key>
+		<code>107</code>
+		<xpos>1</xpos>
+		<ypos>1</ypos>
+	</key>
+	<key>
+		<code>78</code>
+		<xpos>3</xpos>
+		<ypos>1</ypos>
+	</key>
+	<key>
+		<code>127</code>
+		<xpos>5</xpos>
+		<ypos>1</ypos>
+	</key>
 	<key>
 		<code>118</code>
 		<xpos>1</xpos>
-		<ypos>1</ypos>
+		<ypos>3</ypos>
 	</key>
 	<key>
 		<code>110</code>
 		<xpos>3</xpos>
-		<ypos>1</ypos>
+		<ypos>3</ypos>
 	</key>
 	<key>
 		<code>112</code>
 		<xpos>5</xpos>
-		<ypos>1</ypos>
+		<ypos>3</ypos>
 	</key>
 	<key>
 		<code>119</code>
 		<xpos>1</xpos>
-		<ypos>3</ypos>
+		<ypos>5</ypos>
 	</key>
 	<key>
 		<code>115</code>
 		<xpos>3</xpos>
-		<ypos>3</ypos>
+		<ypos>5</ypos>
 	</key>
 	<key>
 		<code>117</code>
 		<xpos>5</xpos>
-		<ypos>3</ypos>
+		<ypos>5</ypos>
 	</key>
 	<key>
 		<code>111</code>

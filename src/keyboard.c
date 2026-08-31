@@ -41,7 +41,11 @@ void keyboard_status_update(struct keyboard *keyboard, struct status *status)
 			extstrs=g_strsplit(allextstr, ":", -1);
 			extstr=extstrs;
 			while (extstr && *extstr) {
-				if (!strcmp(keyboard->id, *(extstr++))) { active=TRUE; break; }
+				if (settings_extension_id_equal(keyboard->id, *extstr)) {
+					active=TRUE;
+					break;
+				}
+				extstr++;
 			}
 			g_strfreev(extstrs);
 			g_free(allextstr);

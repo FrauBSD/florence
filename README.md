@@ -13,6 +13,19 @@ but can use a pointing device (mouse, trackball, stylus, or touchscreen).
 It stays out of your way when you don't need it, offers a timer-based
 auto-click input method, and a gesture-based ramble mode.
 
+## What's new in 0.7.2
+
+See [`NEWS`](./NEWS). Highlights:
+
+- **Fix:** `style.rng` accepts `resize` / `fn` / `switch` symbol types (cold
+  start no longer FATAL after XIncluding `symbols.xml`)
+- **Fix:** fatal-help mail goes to `dteske@FreeBSD.org`
+- **Fix:** `compactfn` ↔ `standardfn` treated as one Function-keys extension
+- **Fix:** live-resize starts from the on-screen scale (no shrink-first frame)
+- **Layout:** navigation extension gains PrtSc / ScrLk / Pause
+- **Build:** `sounds.xml` regenerates on Makefile change (correct FreeBSD
+  `/usr/local` sound paths)
+
 ## What's new in 0.7.1
 
 See [`NEWS`](./NEWS). Highlights:

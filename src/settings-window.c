@@ -231,7 +231,8 @@ void settings_window_extensions_update(gchar *layoutname)
 		settings_window->extensions=g_slist_append(settings_window->extensions, id);
 		temp=settings_get_string(SETTINGS_EXTENSIONS);
 		extstrs=extstr=g_strsplit(temp, ":", -1);
-		while (extstr && *extstr && strcmp(*extstr, id)) {
+		while (extstr && *extstr &&
+		    !settings_extension_id_equal(*extstr, id)) {
 			extstr++;
 		}
 		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(new), extstr && *extstr);
@@ -510,6 +511,7 @@ void settings_window_extension(GtkToggleButton *button, gchar *name)
         gchar **newextstrs=NULL;
         gchar **newextstr=NULL;
 	gchar *new_value=NULL;
+	const gchar *alias;
 
 	if (settings_window_updating) { END_FUNC; return; }
 	allextstr=settings_get_string(SETTINGS_EXTENSIONS);
@@ -518,7 +520,14 @@ void settings_window_extension(GtkToggleButton *button, gchar *name)
                 extstr=extstrs;
 		newextstrs=g_malloc(sizeof(gchar *)*(2+g_strv_length(extstrs)));
                	newextstr=newextstrs;
-		while (extstr && *extstr) { if (strcmp(*extstr, name)) *(newextstr++)=*(extstr++); else extstr++; }
+		alias=settings_extension_id_alias(name);
+		/* Drop this id and its layout alias so we never keep both. */
+		while (extstr && *extstr) {
+			if (!settings_extension_id_equal(*extstr, name) &&
+			    !(alias && !strcmp(*extstr, alias)))
+				*(newextstr++)=*extstr;
+			extstr++;
+		}
 		if (gtk_toggle_button_get_active(button)) {
 			*(newextstr++)=name;
 		}
@@ -528,6 +537,7 @@ void settings_window_extension(GtkToggleButton *button, gchar *name)
                 g_strfreev(extstrs);
                 g_free(newextstrs);
 		g_free(allextstr);
+		g_free(new_value);
         }
 	END_FUNC
 }

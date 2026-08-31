@@ -468,6 +468,29 @@ void settings_set_string(enum settings_item item, const gchar *value)
 	END_FUNC
 }
 
+/*
+ * Function-keys chrome uses different ids per layout (compactfn vs
+ * standardfn). Treat them as the same extension so prefs / GSettings carry
+ * across layout switches.
+ */
+const gchar *settings_extension_id_alias(const gchar *id)
+{
+	if (!id) return NULL;
+	if (!strcmp(id, "compactfn")) return "standardfn";
+	if (!strcmp(id, "standardfn")) return "compactfn";
+	return NULL;
+}
+
+gboolean settings_extension_id_equal(const gchar *a, const gchar *b)
+{
+	const gchar *alias;
+
+	if (!a || !b) return FALSE;
+	if (!strcmp(a, b)) return TRUE;
+	alias=settings_extension_id_alias(a);
+	return alias && !strcmp(alias, b);
+}
+
 /* get a boolean from gsettings */
 gboolean settings_get_bool(enum settings_item item)
 {
