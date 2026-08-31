@@ -1,4 +1,5 @@
 AUTOMAKE_OPTIONS = dejagnu
+ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = src data po
 
@@ -18,8 +19,12 @@ install-data-local:
 uninstall-local:
 	rm -f "$(DESTDIR)$(mandir)/man1/florence.1"
 
+# Invoked by distclean (via distclean-am). Do not remove m4/.
+distclean-local:
+	-rm -rf autom4te.cache
+	-rm -f config.h.in~ configure~ INSTALL
+
 if WITH_DOCS
    SUBDIRS += docs
    EXTRA_DIST += gnome-doc-utils.make
 endif
-

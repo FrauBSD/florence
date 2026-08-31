@@ -25,6 +25,10 @@ See [`NEWS`](./NEWS). Highlights:
 - **Layout:** navigation extension gains PrtSc / ScrLk / Pause
 - **Build:** `sounds.xml` regenerates on Makefile change (correct FreeBSD
   `/usr/local` sound paths)
+- **Build:** GNU build system refreshed for Automake 1.18 / Autoconf 2.73;
+  `AM_MAINTAINER_MODE([disable])` so editing `.am`/`.in` no longer trips a
+  host `automake --foreign` version-mismatch abort; `./autogen.sh` for
+  intentional regenerations
 
 ## What's new in 0.7.1
 

@@ -1,6 +1,12 @@
 AC_INIT([Florence virtual keyboard], [0.7.2], [dteske@FreeBSD.org], [florence])
 AC_CONFIG_HEADERS(config.h)
-AM_INIT_AUTOMAKE(no-dist-gzip dist-bzip2)
+AC_CONFIG_MACRO_DIR([m4])
+AM_INIT_AUTOMAKE([foreign no-dist-gzip dist-bzip2])
+dnl Disable automatic Makefile.in rebuilds by default. A mismatched host
+dnl automake (common after editing .am/.in) used to abort gmake with
+dnl "version mismatch" against the shipped aclocal.m4. Developers who need
+dnl the rebuilds can pass --enable-maintainer-mode to configure.
+AM_MAINTAINER_MODE([disable])
 LT_INIT
 
 # Options

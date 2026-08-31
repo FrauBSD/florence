@@ -17,6 +17,13 @@ Changelog:
 	  (arrows stay coplanar with the Ctrl row)
 	* Build: regenerate sounds.xml whenever Makefile changes so FreeBSD
 	  PREFIX=/usr/local is not stuck with a Linux /usr/share SNDDIR
+	* Build: regenerate GNU build system for Automake 1.18 / Autoconf 2.73;
+	  replace the 2009-era missing script; vendor m4/gnome-doc-utils.m4 so
+	  aclocal no longer needs the extinct gnome-doc-utils package
+	* Build: AM_MAINTAINER_MODE([disable]) by default — touching .am/.in no
+	  longer runs a host automake that aborts with "version mismatch"
+	  against the shipped aclocal.m4; use --enable-maintainer-mode when
+	  intentionally regenerating; autogen.sh wraps autoreconf -fi
 
 2026-08-23 Devin Teske <dteske@FreeBSD.org>
 	* Version 0.7.1
