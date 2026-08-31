@@ -248,7 +248,9 @@ guint xkeyboard_getKeyval(struct xkeyboard *xkeyboard, guint code, GdkModifierTy
 	XkbStateRec xkbState;
 	Display *disp=(Display *)gdk_x11_get_default_xdisplay();
 	XkbGetState(disp, XkbUseCoreKbd, &xkbState);
-	if (!gdk_keymap_translate_keyboard_state(gdk_keymap_get_default(), code, mod, xkbState.group,
+	if (!gdk_keymap_translate_keyboard_state(
+	    gdk_keymap_get_for_display(gdk_display_get_default()),
+	    code, mod, xkbState.group,
 		&keyval, NULL, NULL, NULL)) {
 		keyval=0;
 	}

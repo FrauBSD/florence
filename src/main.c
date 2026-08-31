@@ -247,7 +247,7 @@ static int decode_switches (int argc, char **argv)
 {
 	int c;
 	int ret=0;
-	guint d;
+	unsigned long d;
 
 	while ((c = getopt_long (argc, argv, 
 		"h"    /* help */
@@ -271,8 +271,8 @@ static int decode_switches (int argc, char **argv)
 			case 'c':ret|=1; break;
 			case 'G':florence_set_greeter_mode(TRUE); break;
 			case 'D':d=strtoul(optarg, NULL, 0);
-				if (d!=ULONG_MAX)
-					debounce=d;
+				if (d!=ULONG_MAX && d<=G_MAXUINT)
+					debounce=(guint)d;
 				else
 					flo_warn("invalid debounce value ignored.");
 				break;

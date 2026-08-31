@@ -58,9 +58,10 @@ void trayicon_on_menu(GtkStatusIcon *status_icon, guint button,
 {
 	START_FUNC
 	struct trayicon *trayicon=(struct trayicon *)(user_data);
-	menu_show(G_OBJECT(status_icon), button,
-		trayicon->trayicon_quit, gtk_status_icon_position_menu,
-		trayicon->user_data, activate_time);
+	(void)status_icon;
+	(void)button;
+	(void)activate_time;
+	menu_show(trayicon->trayicon_quit, trayicon->user_data);
 	END_FUNC
 }
 
@@ -127,6 +128,8 @@ struct trayicon *trayicon_new(struct view *view, GCallback quit_cb, gpointer use
 
 	trayicon->trayicon_quit=quit_cb;
 	trayicon->user_data=user_data;
+	/* No GTK3 replacement for GtkStatusIcon. */
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 	trayicon->tray_icon=gtk_status_icon_new();
 	trayicon->view=view;
 	g_signal_connect(G_OBJECT(trayicon->tray_icon), "activate",
@@ -136,6 +139,7 @@ struct trayicon *trayicon_new(struct view *view, GCallback quit_cb, gpointer use
 	gtk_status_icon_set_from_icon_name(trayicon->tray_icon, "florence");
 	gtk_status_icon_set_tooltip_text(trayicon->tray_icon, _("Florence Virtual Keyboard"));
 	gtk_status_icon_set_visible(trayicon->tray_icon, TRUE);
+	G_GNUC_END_IGNORE_DEPRECATIONS
 
 #ifdef ENABLE_NOTIFICATION
 	if (settings_get_bool(SETTINGS_STARTUP_NOTIFICATION))

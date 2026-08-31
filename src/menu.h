@@ -29,6 +29,5 @@ void menu_about(void);
 void menu_help(void);
 /* Called when the icon is right->clicked
  * Displays the menu. */
-void menu_show(GObject *parent, guint button, GCallback quit_func,
-	GtkMenuPositionFunc pos_func, gpointer user_data, guint time);
+void menu_show(GCallback quit_func, gpointer user_data);
 

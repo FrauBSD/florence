@@ -91,8 +91,21 @@ void tools_window_move(GtkWindow *window, Accessible *object)
 	if (Accessible_isComponent(object)) component=Accessible_getComponent(object);
 #endif
 	if (component) {
-		screen_height=gdk_screen_get_height(gdk_screen_get_default());
-		screen_width=gdk_screen_get_width(gdk_screen_get_default());
+		GdkDisplay *dpy;
+		GdkMonitor *m;
+		GdkRectangle geo;
+
+		screen_width = 0;
+		screen_height = 0;
+		dpy = gtk_widget_get_display(GTK_WIDGET(window));
+		m = gdk_display_get_primary_monitor(dpy);
+		if (!m && gdk_display_get_n_monitors(dpy) > 0)
+			m = gdk_display_get_monitor(dpy, 0);
+		if (m) {
+			gdk_monitor_get_geometry(m, &geo);
+			screen_width = geo.width;
+			screen_height = geo.height;
+		}
 #ifdef ENABLE_AT_SPI2
 		rect=atspi_component_get_extents(component, ATSPI_COORD_TYPE_SCREEN, NULL);
 		x=rect->x; y=rect->y; h=rect->height;

@@ -77,9 +77,22 @@ static void service_method_call (GDBusConnection *connection, const gchar *sende
 		settings_set_int(SETTINGS_XPOS, x);
 		settings_set_int(SETTINGS_YPOS, y);
 	} else if (!g_strcmp0(method_name, "move_to")) {
+		GdkDisplay *dpy;
+		GdkMonitor *m;
+		GdkRectangle geo;
+
 		g_variant_get(parameters, "(uuuu)", &x, &y, &w, &h);
-		screen_height=gdk_screen_get_height(gdk_screen_get_default());
-		screen_width=gdk_screen_get_width(gdk_screen_get_default());
+		screen_width = 0;
+		screen_height = 0;
+		dpy = gtk_widget_get_display(GTK_WIDGET(view_window_get(service->view)));
+		m = gdk_display_get_primary_monitor(dpy);
+		if (!m && gdk_display_get_n_monitors(dpy) > 0)
+			m = gdk_display_get_monitor(dpy, 0);
+		if (m) {
+			gdk_monitor_get_geometry(m, &geo);
+			screen_width = geo.width;
+			screen_height = geo.height;
+		}
 		if (gtk_window_get_decorated(GTK_WINDOW(view_window_get(service->view)))) {
 			gdk_window_get_frame_extents(gtk_widget_get_window(
 				GTK_WIDGET(view_window_get(service->view))), &win_rect);
@@ -111,7 +124,7 @@ static void service_method_call (GDBusConnection *connection, const gchar *sende
 	} else if (!g_strcmp0(method_name, "terminate")) service->quit(service->user_data);
 	else if (!g_strcmp0(method_name, "menu")) {
 		g_variant_get(parameters, "(u)", &time);
-		menu_show(NULL, 3, (GCallback)service->quit, NULL, service->user_data, time);
+		menu_show((GCallback)service->quit, service->user_data);
 	} else flo_error(_("Unknown dbus method called: <%s>"), method_name);
 	g_dbus_method_invocation_return_value(invocation, NULL);
 	END_FUNC

@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <glib.h>
 #include <glib/gprintf.h>
+#include <gio/gio.h>
 #include <librsvg/rsvg.h>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
@@ -37,6 +38,20 @@
 /* Constants */
 static gchar *style_css_file_source=DATADIR "/florence.css";
 #define FALLBACK_FONT "sans"
+
+/* Load SVG bytes into an existing handle (replaces write+close). */
+static gboolean
+style_rsvg_load(RsvgHandle *handle, const gchar *source, GError **error)
+{
+	GInputStream *stream;
+	gboolean ok;
+
+	stream = g_memory_input_stream_new_from_data(source,
+	    (gssize)strlen(source), NULL);
+	ok = rsvg_handle_read_stream_sync(handle, stream, NULL, error);
+	g_object_unref(stream);
+	return ok;
+}
 
 /* a symbol is drawn over the shape to identify the effect of key.
  * the symbol is either text (label) or svg. Either one is NULL */
@@ -174,27 +189,46 @@ void style_render_svg(cairo_t *cairoctx, RsvgHandle *handle, gdouble w, gdouble 
 	START_FUNC
 	gdouble xscale, yscale;
 	gdouble xoffset=0., yoffset=0.;
-	RsvgDimensionData dimensions;
+	gdouble dim_w, dim_h;
+	RsvgRectangle viewport;
 	style_cairo_status_check(cairoctx);
-	rsvg_handle_get_dimensions(handle, &dimensions);
+	if (!rsvg_handle_get_intrinsic_size_in_pixels(handle, &dim_w, &dim_h) ||
+	    dim_w <= 0. || dim_h <= 0.) {
+		gboolean has_vb = FALSE;
+		RsvgRectangle vb = { 0., 0., 0., 0. };
+
+		rsvg_handle_get_intrinsic_dimensions(handle,
+		    NULL, NULL, NULL, NULL, &has_vb, &vb);
+		if (has_vb && vb.width > 0. && vb.height > 0.) {
+			dim_w = vb.width;
+			dim_h = vb.height;
+		} else {
+			dim_w = (w > 0.) ? w : 1.;
+			dim_h = (h > 0.) ? h : 1.;
+		}
+	}
 	cairo_save(cairoctx);
 	if (keep_ratio) {
-		if ((dimensions.width/dimensions.height)<(w/h)) {
-			yscale=h/dimensions.height;
-			xscale=yscale*dimensions.width/dimensions.height;
-			xoffset=(w-(dimensions.width*xscale))/2.;
+		if ((dim_w/dim_h)<(w/h)) {
+			yscale=h/dim_h;
+			xscale=yscale*dim_w/dim_h;
+			xoffset=(w-(dim_w*xscale))/2.;
 		} else {
-			xscale=w/dimensions.width;
-			yscale=xscale*dimensions.height/dimensions.width;
-			yoffset=(h-(dimensions.height*yscale))/2.;
+			xscale=w/dim_w;
+			yscale=xscale*dim_h/dim_w;
+			yoffset=(h-(dim_h*yscale))/2.;
 		}
 	} else {
-		xscale=w/dimensions.width;
-		yscale=h/dimensions.height;
+		xscale=w/dim_w;
+		yscale=h/dim_h;
 	}
 	cairo_translate(cairoctx, xoffset, yoffset);
 	cairo_scale(cairoctx, xscale, yscale);
-	rsvg_handle_render_cairo_sub(handle, cairoctx, sub);
+	viewport.x = 0.;
+	viewport.y = 0.;
+	viewport.width = dim_w;
+	viewport.height = dim_h;
+	rsvg_handle_render_layer(handle, cairoctx, sub, &viewport, NULL);
 	cairo_restore(cairoctx);
 	END_FUNC
 }
@@ -440,8 +474,7 @@ void style_shape_new(struct style *style, char *name, char *svg)
 	default_uri=settings_get_string(SETTINGS_STYLE_ITEM);
 	rsvg_handle_set_base_uri(shape->svg, style->base_uri?style->base_uri:default_uri);
 	if (default_uri) g_free(default_uri);
-	rsvg_handle_write(shape->svg, (guchar *)source, (gsize)strlen(source), &error);
-	rsvg_handle_close(shape->svg, &error);
+	style_rsvg_load(shape->svg, source, &error);
 	if (error) flo_fatal(_("Unable to parse svg from layout file: svg=\"%s\" error=\"%s\""),
 		source, error->message);
 	style->shapes=g_slist_append(style->shapes, (gpointer)shape);
@@ -503,8 +536,7 @@ void style_shape_draw(struct style *style, struct shape *shape, cairo_t *cairoct
 			if (default_uri) g_free(default_uri);
 		}
 		source=style_svg_css_insert((gchar *)shape->source, c);
-		rsvg_handle_write(svg, (guchar *)source, (gsize)strlen(source), &error);
-		rsvg_handle_close(svg, &error);
+		style_rsvg_load(svg, source, &error);
 		style_render_svg(cairoctx, svg, w, h, FALSE, NULL);
 		if (source) g_free(source);
 		if (svg) g_object_unref(G_OBJECT(svg));
@@ -551,9 +583,7 @@ void style_update_color (gchar *source, RsvgHandle **svg, gchar *default_uri)
 		source_with_css=style_svg_css_insert(source, STYLE_KEY_COLOR);
 		*svg=rsvg_handle_new();
 		if (default_uri) rsvg_handle_set_base_uri(*svg, default_uri);
-		rsvg_handle_write(*svg, (guchar *)source_with_css,
-			(gsize)strlen((gchar *)source_with_css), &error);
-		rsvg_handle_close(*svg, &error);
+		style_rsvg_load(*svg, source_with_css, &error);
 		if (error) flo_fatal(_("Unable to parse svg from layout file: %s"), source_with_css);
 		if (source_with_css) g_free(source_with_css);
 	}
@@ -601,8 +631,20 @@ GdkPixbuf *style_pixbuf_draw(struct style *style)
 {
 	START_FUNC
 	struct shape *shape=style_shape_get(style, NULL);
-	GdkPixbuf *temp=rsvg_handle_get_pixbuf(shape->svg);
-	GdkPixbuf *ret=gdk_pixbuf_scale_simple(temp, 32, 32, GDK_INTERP_HYPER);
+	GError *error=NULL;
+	GdkPixbuf *temp=rsvg_handle_get_pixbuf_and_error(shape->svg, &error);
+	GdkPixbuf *ret;
+
+	if (!temp) {
+		if (error) {
+			flo_warn(_("Unable to render style preview: %s"),
+			    error->message);
+			g_error_free(error);
+		}
+		END_FUNC
+		return NULL;
+	}
+	ret=gdk_pixbuf_scale_simple(temp, 32, 32, GDK_INTERP_HYPER);
 	g_object_unref(G_OBJECT(temp));
 	END_FUNC
 	return ret;

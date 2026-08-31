@@ -110,9 +110,10 @@ gboolean flo_mouse_leave_event (GtkWidget *window, GdkEvent *event, gpointer use
 			x = (gint)((GdkEventCrossing *)event)->x_root;
 			y = (gint)((GdkEventCrossing *)event)->y_root;
 		} else {
-			gdk_device_get_position(gdk_device_manager_get_client_pointer(
-				gdk_display_get_device_manager(gdk_display_get_default())),
-				NULL, &x, &y);
+			gdk_device_get_position(
+			    gdk_seat_get_pointer(gdk_display_get_default_seat(
+				gdk_display_get_default())),
+			    NULL, &x, &y);
 		}
 		gtk_window_move(GTK_WINDOW(window), x-florence->xpos, y-florence->ypos);
 		END_FUNC
@@ -146,9 +147,10 @@ gboolean flo_mouse_leave_event (GtkWidget *window, GdkEvent *event, gpointer use
 		gint px, py, ox, oy;
 		gint ww, wh;
 		if (gw) {
-			gdk_device_get_position(gdk_device_manager_get_client_pointer(
-				gdk_display_get_device_manager(gdk_display_get_default())),
-				NULL, &px, &py);
+			gdk_device_get_position(
+			    gdk_seat_get_pointer(gdk_display_get_default_seat(
+				gdk_display_get_default())),
+			    NULL, &px, &py);
 			gdk_window_get_origin(gw, &ox, &oy);
 			ww = gdk_window_get_width(gw);
 			wh = gdk_window_get_height(gw);
@@ -358,9 +360,10 @@ gboolean flo_mouse_move_event(GtkWidget *window, GdkEvent *event, gpointer user_
 			x = (gint)((GdkEventMotion *)event)->x_root;
 			y = (gint)((GdkEventMotion *)event)->y_root;
 		} else {
-			gdk_device_get_position(gdk_device_manager_get_client_pointer(
-				gdk_display_get_device_manager(gdk_display_get_default())),
-				NULL, &x, &y);
+			gdk_device_get_position(
+			    gdk_seat_get_pointer(gdk_display_get_default_seat(
+				gdk_display_get_default())),
+			    NULL, &x, &y);
 		}
 		/*
 		 * Click vs drag: ignore motion inside slop so a single click
@@ -385,9 +388,10 @@ gboolean flo_mouse_move_event(GtkWidget *window, GdkEvent *event, gpointer user_
 			x = (gint)((GdkEventMotion *)event)->x_root;
 			y = (gint)((GdkEventMotion *)event)->y_root;
 		} else {
-			gdk_device_get_position(gdk_device_manager_get_client_pointer(
-				gdk_display_get_device_manager(gdk_display_get_default())),
-				NULL, &x, &y);
+			gdk_device_get_position(
+			    gdk_seat_get_pointer(gdk_display_get_default_seat(
+				gdk_display_get_default())),
+			    NULL, &x, &y);
 		}
 		dx = x - florence->status->resize_root_x;
 		dy = y - florence->status->resize_root_y;
@@ -645,7 +649,6 @@ void flo_free(struct florence *florence)
 	if (florence->service) service_free(florence->service);
 	g_free(florence);
 	xmlCleanupParser();
-	xmlMemoryDump();
 	END_FUNC
 }
 

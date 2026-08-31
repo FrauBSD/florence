@@ -85,8 +85,7 @@ void menu_help(void)
 
 /* Called when the icon is right->clicked
  * Displays the menu. */
-void menu_show(GObject *parent, guint button, GCallback quit_func,
-	GtkMenuPositionFunc pos_func, gpointer user_data, guint time)
+void menu_show(GCallback quit_func, gpointer user_data)
 {
 	START_FUNC
 	GtkWidget *menu, *about, *config, *quit;
@@ -96,12 +95,8 @@ void menu_show(GObject *parent, guint button, GCallback quit_func,
 
 	if (florence_in_greeter()) {
 		/* XDM greeter: never Preferences / Quit / About. */
-		(void)parent;
-		(void)button;
 		(void)quit_func;
-		(void)pos_func;
 		(void)user_data;
-		(void)time;
 		END_FUNC
 		return;
 	}
@@ -130,8 +125,7 @@ void menu_show(GObject *parent, guint button, GCallback quit_func,
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit);
 	gtk_widget_show_all(menu);
- 
-	gtk_menu_popup(GTK_MENU(menu), NULL, NULL, pos_func,
-		parent, button, time);
+
+	gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
 	END_FUNC
 }

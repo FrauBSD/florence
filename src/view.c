@@ -367,10 +367,23 @@ session_place_keyboard(struct view *view)
 		return;
 	dpy = gtk_widget_get_display(GTK_WIDGET(view->window));
 	if (!session_builtin_panel(&px, &py, &pw, &ph)) {
+		GdkMonitor *m;
+		GdkRectangle geo;
+
 		px = 0;
 		py = 0;
-		pw = gdk_screen_get_width(gdk_screen_get_default());
-		ph = gdk_screen_get_height(gdk_screen_get_default());
+		pw = 0;
+		ph = 0;
+		m = gdk_display_get_primary_monitor(dpy);
+		if (!m && gdk_display_get_n_monitors(dpy) > 0)
+			m = gdk_display_get_monitor(dpy, 0);
+		if (m) {
+			gdk_monitor_get_geometry(m, &geo);
+			px = geo.x;
+			py = geo.y;
+			pw = geo.width;
+			ph = geo.height;
+		}
 	}
 
 	em = getenv("FLORENCE_PLACE_MARGIN");
@@ -671,7 +684,10 @@ view_shape_drag_suspend(struct view *view)
 	disp = (Display *)gdk_x11_get_default_xdisplay();
 	XShapeCombineMask(disp, GDK_WINDOW_XID(gdkw), ShapeBounding, 0, 0, 0,
 	    ShapeSet);
+	/* No non-deprecated GdkWindow background API in GTK3. */
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 	gdk_window_set_background_rgba(gdkw, &black);
+	G_GNUC_END_IGNORE_DEPRECATIONS
 	view_shape_drag_suspended = 1;
 }
 
@@ -1269,7 +1285,9 @@ void view_update(struct view *view, struct key *key, gboolean statechange)
 	}
 	if (status_focus_get(view->status)) {
 		if (!view->hand_cursor) {
-			cursor=gdk_cursor_new(GDK_HAND2);
+			cursor=gdk_cursor_new_for_display(
+			    gtk_widget_get_display(GTK_WIDGET(view->window)),
+			    GDK_HAND2);
 			gdk_window_set_cursor(gtk_widget_get_window(GTK_WIDGET(view->window)), cursor);
 			view->hand_cursor=TRUE;
 		}
@@ -1285,7 +1303,7 @@ void view_screen_changed (GtkWidget *widget, GdkScreen *old_screen, struct view 
 {
 	START_FUNC
 	GdkVisual *visual;
-	if (gtk_widget_is_composited(widget)) {
+	if (gdk_screen_is_composited(gtk_widget_get_screen(widget))) {
 		flo_info(_("X11 composite extension detected. Semi-transparency is enabled."));
 		if (view) view->composite=TRUE;
 		visual=gdk_screen_get_rgba_visual(gdk_screen_get_default());
@@ -1353,7 +1371,6 @@ void view_configure (GtkWidget *window, GdkEventConfigure* pConfig, struct view 
 		rect.width=pConfig->width; rect.height=pConfig->height;
 		gtk_widget_size_allocate(GTK_WIDGET(view->window), &rect);
 		gdk_window_invalidate_rect(gtk_widget_get_window(GTK_WIDGET(view->window)), &rect, TRUE);
-		gdk_window_process_updates(gtk_widget_get_window(GTK_WIDGET(view->window)), FALSE);
 	}
 
 	END_FUNC
@@ -1690,8 +1707,6 @@ struct view *view_new (struct status *status, struct style *style, GSList *keybo
 	gtk_window_set_keep_above(view->window, settings_get_bool(SETTINGS_ALWAYS_ON_TOP));
  	gtk_window_set_accept_focus(view->window, FALSE);
 	gtk_window_set_skip_taskbar_hint(view->window, !settings_get_bool(SETTINGS_TASK_BAR));
-	/* Remove resize grip since it is buggy */
-	gtk_window_set_has_resize_grip(view->window, FALSE);
 	view_resize(view);
 	gtk_container_set_border_width(GTK_CONTAINER(view->window), 0);
 	gtk_widget_set_events(GTK_WIDGET(view->window),

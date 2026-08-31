@@ -365,10 +365,12 @@ void settings_window_update()
 				case SETTINGS_STRING:
 					object=gtk_builder_get_object(settings_window->gtkbuilder,
 						params[searchidx].builder_name);
-					if (GTK_IS_FONT_BUTTON(object))
-						gtk_font_button_set_font_name(
-							GTK_FONT_BUTTON(object),
-							settings_get_string(searchidx));
+					if (GTK_IS_FONT_BUTTON(object)) {
+						gchar *font=settings_get_string(searchidx);
+						gtk_font_chooser_set_font(
+							GTK_FONT_CHOOSER(object), font);
+						if (font) g_free(font);
+					}
 					break;
 				case SETTINGS_DOUBLE:
 					gtk_range_set_value(
@@ -557,8 +559,11 @@ void settings_window_set_double(GtkHScale *scale)
 void settings_window_font(GtkFontButton *font)
 {
 	START_FUNC
+	gchar *name;
 	if (settings_window_updating) { END_FUNC; return; }
-	settings_set_string(SETTINGS_FONT, gtk_font_button_get_font_name(font));
+	name=gtk_font_chooser_get_font(GTK_FONT_CHOOSER(font));
+	settings_set_string(SETTINGS_FONT, name);
+	if (name) g_free(name);
 	END_FUNC
 }
 

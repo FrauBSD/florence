@@ -267,15 +267,30 @@ void controller_icon_expose (GtkWidget *window, cairo_t* context, void *userdata
 void controller_icon_create (struct controller *controller, GtkWindow **icon, gdouble scale)
 {
 	START_FUNC
-	RsvgDimensionData dim;
+	gdouble dim_w, dim_h;
 	if (!*icon) {
 		*icon=GTK_WINDOW(gtk_window_new(GTK_WINDOW_TOPLEVEL));
 		gtk_window_set_keep_above(*icon, TRUE);
 		gtk_window_set_skip_taskbar_hint(*icon, TRUE);
 		/* Prevent GTK from filling theme background over our glyph. */
 		gtk_widget_set_app_paintable(GTK_WIDGET(*icon), TRUE);
-		rsvg_handle_get_dimensions(handle, &dim);
-		gtk_widget_set_size_request(GTK_WIDGET(*icon), dim.width, dim.height);
+		if (!rsvg_handle_get_intrinsic_size_in_pixels(handle, &dim_w, &dim_h) ||
+		    dim_w <= 0. || dim_h <= 0.) {
+			gboolean has_vb = FALSE;
+			RsvgRectangle vb = { 0., 0., 0., 0. };
+
+			rsvg_handle_get_intrinsic_dimensions(handle,
+			    NULL, NULL, NULL, NULL, &has_vb, &vb);
+			if (has_vb && vb.width > 0. && vb.height > 0.) {
+				dim_w = vb.width;
+				dim_h = vb.height;
+			} else {
+				dim_w = 32.;
+				dim_h = 32.;
+			}
+		}
+		gtk_widget_set_size_request(GTK_WIDGET(*icon),
+		    (gint)(dim_w + 0.5), (gint)(dim_h + 0.5));
 		gtk_container_set_border_width(GTK_CONTAINER(*icon), 0);
 		gtk_window_set_decorated(*icon, FALSE);
 		gtk_window_set_position(*icon, GTK_WIN_POS_MOUSE);
@@ -590,8 +605,10 @@ void controller_icon_on_move (GtkWidget *window, GdkEventButton *event, gpointer
 		return;
 	}
 
-	gdk_device_get_position(gdk_device_manager_get_client_pointer(
-		gdk_display_get_device_manager(gdk_display_get_default())), NULL, &x, &y);
+	gdk_device_get_position(
+	    gdk_seat_get_pointer(gdk_display_get_default_seat(
+		gdk_display_get_default())),
+	    NULL, &x, &y);
 	switch(controller->icon_moving) {
 		case CONTROLLER_IMMOBILE: break;
 		case CONTROLLER_PRESSED:

@@ -152,7 +152,7 @@ GSettings *settings_new_object(gchar *file, const gchar *cat)
 	GSettingsBackend *backend;
 	GSettings *ret=NULL;
 	if (file) {
-		backend=g_keyfile_settings_backend_new(file, "/apps/florence/", "toplevel");
+		backend=g_keyfile_settings_backend_new(file, "/org/florence/", "toplevel");
 		if (!backend) {
 			flo_error(_("Unable to parse configuration file <%s>"), file);
 		} else {
@@ -243,7 +243,7 @@ void settings_changecb_register(enum settings_item item, settings_callback cb, g
 {
 	START_FUNC
 	struct settings_registration *registration, *similar;
-	if (settings_infos->settings) {
+	if (settings_infos->settings[settings_defaults[item].cat]) {
 		registration=g_malloc(sizeof(struct settings_registration));
 		memset(registration, 0, sizeof(struct settings_registration));
 		registration->item=item;
@@ -344,7 +344,7 @@ GVariant *settings_value_get(enum settings_item item)
 	gchar *str=NULL;
 	gchar *name=settings_defaults[item].settings_name;
 
-	if (settings_infos->settings) {
+	if (settings_infos->settings[settings_defaults[item].cat]) {
 		ret=g_settings_get_value(settings_infos->settings[settings_defaults[item].cat], name);
 	}
 	if (ret) {
@@ -381,7 +381,7 @@ void settings_set_int(enum settings_item item, gint value)
 	gchar *name=settings_defaults[item].settings_name;
 	enum settings_cat cat=settings_defaults[item].cat;
 	struct settings_registration *registration, *list;
-	if (settings_infos->settings) {
+	if (settings_infos->settings[cat]) {
 		registration=settings_registration_get(item);
 		list=registration;
 		while (list) {
@@ -422,7 +422,7 @@ void settings_set_double(enum settings_item item, double value, gboolean b)
 	gchar *name=settings_defaults[item].settings_name;
 	enum settings_cat cat=settings_defaults[item].cat;
 	struct settings_registration *registration, *list;
-	if (settings_infos->settings) {
+	if (settings_infos->settings[cat]) {
 		registration=settings_registration_get(item);
 		list=registration;
 		while (!b && list) {
@@ -461,7 +461,7 @@ void settings_set_string(enum settings_item item, const gchar *value)
 {
 	START_FUNC
 	gchar *name=settings_defaults[item].settings_name;
-	if (settings_infos->settings) {
+	if (settings_infos->settings[settings_defaults[item].cat]) {
 		g_settings_set_string(settings_infos->settings[settings_defaults[item].cat],
 			name, value);
 	}
@@ -514,7 +514,7 @@ void settings_set_bool(enum settings_item item, gboolean value)
 {
 	START_FUNC
 	gchar *name=settings_defaults[item].settings_name;
-	if (settings_infos->settings) {
+	if (settings_infos->settings[settings_defaults[item].cat]) {
 		g_settings_set_boolean(settings_infos->settings[settings_defaults[item].cat],
 			name, value);
 	}
