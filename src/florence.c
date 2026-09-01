@@ -382,7 +382,7 @@ gboolean flo_mouse_move_event(GtkWidget *window, GdkEvent *event, gpointer user_
 	} else if (status_get_resizing(florence->status)) {
 		gdouble factor, scale;
 		gint dx, dy;
-		gint slop = 8;
+		gint slop = 16;
 
 		if (event && event->type == GDK_MOTION_NOTIFY) {
 			x = (gint)((GdkEventMotion *)event)->x_root;

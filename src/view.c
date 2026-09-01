@@ -1699,9 +1699,6 @@ struct view *view_new (struct status *status, struct style *style, GSList *keybo
 	view->keyboards=keyboards;
 	view->scalex=settings_get_double(SETTINGS_SCALEX);
 	view->scaley=settings_get_double(SETTINGS_SCALEY);
-	/* Click on resize restores this cold-start size. */
-	if (status)
-		status->resize_scale_launch = view->scalex;
 	view_set_dimensions(view);
 	view->window=GTK_WINDOW(gtk_window_new(GTK_WINDOW_TOPLEVEL));
 	gtk_window_set_keep_above(view->window, settings_get_bool(SETTINGS_ALWAYS_ON_TOP));
@@ -1717,12 +1714,16 @@ struct view *view_new (struct status *status, struct style *style, GSList *keybo
 #ifndef FLORENCE_GREETER
 	/* Greeter-like open pos, raised by the Start/taskbar height. */
 	session_place_keyboard(view);
+	/* After place/fit - click-restore must match the size the user saw. */
+	if (status)
+		status->resize_scale_launch = view->scalex;
 #else
 	gtk_window_move(view->window, settings_get_int(SETTINGS_XPOS), settings_get_int(SETTINGS_YPOS));
 	if (status) {
 		status->move_launch_x = settings_get_int(SETTINGS_XPOS);
 		status->move_launch_y = settings_get_int(SETTINGS_YPOS);
 		status->move_launch_valid = TRUE;
+		status->resize_scale_launch = view->scalex;
 	}
 #endif
 	/*g_signal_connect(gdk_keymap_get_default(), "keys-changed", G_CALLBACK(view_on_keys_changed), view);*/

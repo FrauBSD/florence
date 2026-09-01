@@ -950,9 +950,27 @@ void status_set_resizing(struct status *status, gboolean resizing)
 			/*
 			 * Click (no drag past slop): restore cold-start size.
 			 * Drag: keep the live scale already applied.
+			 *
+			 * Also treat as click when press->release never changed
+			 * the pixel size: past-slop jitter can set resize_dragged
+			 * without a real resize, which used to eat the first
+			 * click-to-restore after a small drag.
 			 */
-			if (!status->resize_dragged &&
-			    status->resize_scale_launch > 0.0) {
+			gboolean restore = !status->resize_dragged;
+
+			if (!restore && status->resize_scale0 >= 10.0) {
+				guint w0 = (guint)(status->view->vwidth *
+				    status->resize_scale0 + 0.5);
+				guint h0 = (guint)(status->view->vheight *
+				    status->resize_scale0 + 0.5);
+
+				if (w0 < 1) w0 = 1;
+				if (h0 < 1) h0 = 1;
+				if (status->view->width == w0 &&
+				    status->view->height == h0)
+					restore = TRUE;
+			}
+			if (restore && status->resize_scale_launch > 0.0) {
 				view_live_scale(status->view,
 				    status->resize_scale_launch,
 				    status->resize_pin_x,
