@@ -60,8 +60,7 @@ void trayicon_on_menu(GtkStatusIcon *status_icon, guint button,
 	struct trayicon *trayicon=(struct trayicon *)(user_data);
 	(void)status_icon;
 	(void)button;
-	(void)activate_time;
-	menu_show(trayicon->trayicon_quit, trayicon->user_data);
+	menu_show(trayicon->trayicon_quit, trayicon->user_data, activate_time);
 	END_FUNC
 }
 

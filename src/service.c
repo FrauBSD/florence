@@ -124,7 +124,7 @@ static void service_method_call (GDBusConnection *connection, const gchar *sende
 	} else if (!g_strcmp0(method_name, "terminate")) service->quit(service->user_data);
 	else if (!g_strcmp0(method_name, "menu")) {
 		g_variant_get(parameters, "(u)", &time);
-		menu_show((GCallback)service->quit, service->user_data);
+		menu_show((GCallback)service->quit, service->user_data, time);
 	} else flo_error(_("Unknown dbus method called: <%s>"), method_name);
 	g_dbus_method_invocation_return_value(invocation, NULL);
 	END_FUNC

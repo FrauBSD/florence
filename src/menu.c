@@ -83,12 +83,48 @@ void menu_help(void)
 }
 #endif
 
+/* Build a trigger event for menu popup (DBus path has no current GdkEvent). */
+static GdkEvent *
+menu_trigger_event(guint32 time)
+{
+	GdkEvent *event;
+	GdkDevice *pointer;
+	GdkWindow *window;
+	gint x, y, rx, ry;
+
+	event = gtk_get_current_event();
+	if (event)
+		return event;
+
+	pointer = gdk_seat_get_pointer(gdk_display_get_default_seat(
+	    gdk_display_get_default()));
+	if (!pointer)
+		return NULL;
+	window = gdk_device_get_window_at_position(pointer, &x, &y);
+	if (!window)
+		return NULL;
+
+	event = gdk_event_new(GDK_BUTTON_RELEASE);
+	event->button.window = g_object_ref(window);
+	event->button.send_event = TRUE;
+	event->button.time = time ? time : GDK_CURRENT_TIME;
+	event->button.button = 3;
+	event->button.device = pointer;
+	event->button.x = x;
+	event->button.y = y;
+	gdk_window_get_root_coords(window, x, y, &rx, &ry);
+	event->button.x_root = rx;
+	event->button.y_root = ry;
+	return event;
+}
+
 /* Called when the icon is right->clicked
  * Displays the menu. */
-void menu_show(GCallback quit_func, gpointer user_data)
+void menu_show(GCallback quit_func, gpointer user_data, guint32 time)
 {
 	START_FUNC
 	GtkWidget *menu, *about, *config, *quit;
+	GdkEvent *event;
 #ifdef ENABLE_HELP
 	GtkWidget *help;
 #endif
@@ -97,6 +133,7 @@ void menu_show(GCallback quit_func, gpointer user_data)
 		/* XDM greeter: never Preferences / Quit / About. */
 		(void)quit_func;
 		(void)user_data;
+		(void)time;
 		END_FUNC
 		return;
 	}
@@ -126,6 +163,16 @@ void menu_show(GCallback quit_func, gpointer user_data)
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit);
 	gtk_widget_show_all(menu);
 
-	gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
+	event = menu_trigger_event(time);
+	if (event) {
+		gtk_menu_popup_at_pointer(GTK_MENU(menu), event);
+		gdk_event_free(event);
+	} else {
+		/* No window under the pointer (rare); keep time-based popup. */
+		G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+		gtk_menu_popup(GTK_MENU(menu), NULL, NULL, NULL, NULL, 3,
+		    time ? time : gtk_get_current_event_time());
+		G_GNUC_END_IGNORE_DEPRECATIONS
+	}
 	END_FUNC
 }
