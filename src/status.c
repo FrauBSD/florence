@@ -896,7 +896,13 @@ void status_set_resizing(struct status *status, gboolean resizing)
 	GdkWindow *gdkw;
 
 	if (resizing) {
-		if (!status->resizing) {
+		/*
+		 * Re-baseline on every press (not only when !resizing): a lost
+		 * release can leave status->resizing TRUE, and the stale
+		 * resize_dragged/pin from the previous drag then ate the next
+		 * click-restore.
+		 */
+		{
 			/*
 			 * Baseline the live view scale, not GSettings. Portrait
 			 * fit / session placement can leave view->scalex ahead of

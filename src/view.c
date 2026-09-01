@@ -633,7 +633,34 @@ void view_resize (struct view *view)
 		/* Do not call configure signal handler */
 		if (view->configure_handler) g_signal_handler_disconnect(G_OBJECT(view->window), view->configure_handler);
 		view->configure_handler=0;
-		gtk_window_resize(view->window, view->width, view->height);
+		/*
+		 * Live-resize pins the widget size request; a layout change
+		 * (extension toggle) must re-pin and resize the X window
+		 * directly, exactly as view_live_scale does. gtk_window_resize
+		 * alone is clamped by the stale min-size hint when shrinking,
+		 * leaving the X window at the old size while we draw for the
+		 * new one - visuals then wedge until the next live drag.
+		 */
+		gtk_widget_set_size_request(GTK_WIDGET(view->window),
+		    (gint)view->width, (gint)view->height);
+		{
+			GdkWindow *gdkw;
+
+			gdkw=gtk_widget_get_window(GTK_WIDGET(view->window));
+			if (gdkw) {
+				gint ox, oy;
+
+				hints.min_width=(gint)view->width;
+				hints.min_height=(gint)view->height;
+				gdk_window_set_geometry_hints(gdkw, &hints,
+				    GDK_HINT_MIN_SIZE);
+				gdk_window_get_origin(gdkw, &ox, &oy);
+				gdk_window_move_resize(gdkw, ox, oy,
+				    (gint)view->width, (gint)view->height);
+			} else
+				gtk_window_resize(view->window,
+				    view->width, view->height);
+		}
 	} else {
 		gtk_window_set_geometry_hints(view->window, NULL, &hints,
 			GDK_HINT_WIN_GRAVITY);
@@ -788,8 +815,18 @@ void view_live_scale (struct view *view, gdouble scale, gint pin_x, gint pin_y)
 	    (gint)w, (gint)h);
 
 	gdkw = gtk_widget_get_window(GTK_WIDGET(view->window));
-	if (gdkw)
+	if (gdkw) {
+		/*
+		 * Push WM_NORMAL_HINTS now: GTK defers the min-size update
+		 * from the size request, so a shrink issued first is clamped
+		 * back to the old size by the WM (restore needed two clicks -
+		 * the first snapped back, reading as a flash).
+		 */
+		hints.min_width = (gint)w;
+		hints.min_height = (gint)h;
+		gdk_window_set_geometry_hints(gdkw, &hints, GDK_HINT_MIN_SIZE);
 		gdk_window_move_resize(gdkw, pin_x, pin_y, (gint)w, (gint)h);
+	}
 
 	/* Force fresh SVG/key art at this scale (no stretch blit). */
 	if (view->background) {
@@ -815,6 +852,7 @@ void view_live_scale_commit (struct view *view)
 {
 	START_FUNC
 	GdkWindow *gdkw;
+	GdkGeometry hints;
 	gint pin_x, pin_y;
 
 	if (!view || !view->window) {
@@ -838,9 +876,14 @@ void view_live_scale_commit (struct view *view)
 	    (gint)view->width, (gint)view->height);
 
 	gdkw = gtk_widget_get_window(GTK_WIDGET(view->window));
-	if (gdkw)
+	if (gdkw) {
+		/* Same deferred-hint clamp as view_live_scale: push first. */
+		hints.min_width = (gint)view->width;
+		hints.min_height = (gint)view->height;
+		gdk_window_set_geometry_hints(gdkw, &hints, GDK_HINT_MIN_SIZE);
 		gdk_window_move_resize(gdkw, pin_x, pin_y,
 		    (gint)view->width, (gint)view->height);
+	}
 
 	settings_set_double(SETTINGS_SCALEX, view->scalex, FALSE);
 	settings_set_double(SETTINGS_SCALEY, view->scaley, FALSE);
