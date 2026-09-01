@@ -256,10 +256,12 @@ gchar *settings_window_combo_update(gchar *item)
 	START_FUNC
 	GtkTreeModel *model;
 	GtkTreeIter iter;
-	gboolean out;
 	gchar *data=NULL;
+	gchar *ret=NULL;
 	GtkComboBox *combo=GTK_COMBO_BOX(gtk_builder_get_object(settings_window->gtkbuilder, item));
 	gchar *val;
+	const gchar *base_val, *base_row;
+	gboolean matched=FALSE;
 
 	/* update the layout combo box */
 	model=gtk_combo_box_get_model(combo);
@@ -267,14 +269,48 @@ gchar *settings_window_combo_update(gchar *item)
 		val=settings_get_string(settings_get_settings_name(GTK_WIDGET(combo)));
 		do {
 			gtk_tree_model_get(model, &iter, 1, &data, -1);
-			if ((out=(!strcmp(data, val))))
+			if (val && data && !strcmp(data, val)) {
 				gtk_combo_box_set_active_iter(combo, &iter);
-		} while ((!out) && gtk_tree_model_iter_next(model, &iter));
+				ret=data;
+				data=NULL;
+				matched=TRUE;
+				break;
+			}
+			g_free(data);
+			data=NULL;
+		} while (gtk_tree_model_iter_next(model, &iter));
+		/*
+		 * Theme path (FVWM --use-config) is not under DATADIR. Match by
+		 * basename for the combo display, but return the real path so
+		 * extensions_update still reads Navigation keys from that file.
+		 * A failed search must NOT return the last readdir row (that
+		 * was compact-alt here - no Navigation keys).
+		 */
+		if (!matched && val && val[0]) {
+			base_val=strrchr(val, '/');
+			base_val=base_val ? base_val+1 : val;
+			if (gtk_tree_model_get_iter_first(model, &iter)) {
+				do {
+					gtk_tree_model_get(model, &iter, 1, &data, -1);
+					base_row=data ? strrchr(data, '/') : NULL;
+					base_row=base_row ? base_row+1 : data;
+					if (base_row && !strcmp(base_row, base_val)) {
+						gtk_combo_box_set_active_iter(combo, &iter);
+						g_free(data);
+						data=NULL;
+						break;
+					}
+					g_free(data);
+					data=NULL;
+				} while (gtk_tree_model_iter_next(model, &iter));
+			}
+			ret=g_strdup(val);
+		}
 		if (val) g_free(val);
 	}
 
 	END_FUNC
-	return data;
+	return ret;
 }
 
 /* update the input method options */

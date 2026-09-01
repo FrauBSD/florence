@@ -949,36 +949,17 @@ void status_set_resizing(struct status *status, gboolean resizing)
 		}
 		if (status->view) {
 			/*
-			 * Click restores cold-start size; drag keeps the live
-			 * scale. Keep live size only for an intentional drag:
-			 * left the press-slop AND changed scale by >= 5% (min
-			 * 1.0). Pointer-at-release checks were too tight under
-			 * seat-grab chatter (CLI worse than FVWM): first click
-			 * only committed a redraw (flash), second restored.
+			 * Click restores cold-start size; drag keeps live scale.
+			 * resize_dragged is set only after motion applies a
+			 * real scale change (see florence.c); grab jitter alone
+			 * must not keep the enlarged size.
 			 */
-			gboolean restore = FALSE;
-
-			if (status->resize_scale_launch > 0.0) {
-				gdouble delta, min_drag;
-
-				delta = fabs(status->view->scalex -
-				    status->resize_scale0);
-				min_drag = status->resize_scale0 * 0.05;
-				if (min_drag < 1.0)
-					min_drag = 1.0;
-				if (!(status->resize_dragged &&
-				    delta >= min_drag))
-					restore = TRUE;
-			}
-			if (restore) {
+			if (status->resize_scale_launch > 0.0 &&
+			    !status->resize_dragged) {
 				view_live_scale(status->view,
 				    status->resize_scale_launch,
 				    status->resize_pin_x,
 				    status->resize_pin_y);
-				/*
-				 * Same stuck-hover case as move click-restore:
-				 * leave suppressed during resize + layout jump.
-				 */
 				status->pressed = NULL;
 				status->focus = NULL;
 			}

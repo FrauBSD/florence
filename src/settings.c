@@ -446,11 +446,23 @@ gchar *settings_get_string(enum settings_item item)
 	START_FUNC
 	gchar *ret=NULL;
 	GVariant *val=settings_value_get(item);
+	const gchar *def;
+
 	if (!val) {
 		ret=g_strdup(settings_defaults[item].default_value.vstring);
 	} else {
 		ret=g_strdup(g_variant_get_string(val, NULL));
 		g_variant_unref(val);
+		/*
+		 * Schema defaults for file/style are empty strings; treat that
+		 * the same as unset so prefs and loaders use the C defaults
+		 * (stock florence.xml), not a failed combo match.
+		 */
+		def=settings_defaults[item].default_value.vstring;
+		if (ret && ret[0]=='\0' && def && def[0]!='\0') {
+			g_free(ret);
+			ret=g_strdup(def);
+		}
 	}
 	END_FUNC
 	return ret;

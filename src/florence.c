@@ -28,6 +28,7 @@
 #include "layoutreader.h"
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
+#include <math.h>
 
 static gboolean florence_greeter_mode = FALSE;
 
@@ -380,9 +381,9 @@ gboolean flo_mouse_move_event(GtkWidget *window, GdkEvent *event, gpointer user_
 		}
 		gtk_window_move(GTK_WINDOW(window), x-florence->xpos, y-florence->ypos);
 	} else if (status_get_resizing(florence->status)) {
-		gdouble factor, scale;
 		gint dx, dy;
 		gint slop = 16;
+		gdouble factor, scale, min_drag;
 
 		if (event && event->type == GDK_MOTION_NOTIFY) {
 			x = (gint)((GdkEventMotion *)event)->x_root;
@@ -396,21 +397,31 @@ gboolean flo_mouse_move_event(GtkWidget *window, GdkEvent *event, gpointer user_
 		dx = x - florence->status->resize_root_x;
 		dy = y - florence->status->resize_root_y;
 		/*
-		 * Click vs drag: ignore motion inside slop so a single click
-		 * can restore the cold-start size on release.
+		 * Click vs drag: ignore motion inside slop, and do not mark a
+		 * drag (or call live_scale) until scale would change by a
+		 * meaningful amount. Seat-grab chatter past slop used to set
+		 * resize_dragged and eat click-to-restore.
 		 */
+		factor = 1.0 + ((gdouble)(dx + dy) / 800.0);
+		if (factor < 0.45) factor = 0.45;
+		if (factor > 2.5) factor = 2.5;
+		scale = florence->status->resize_scale0 * factor;
 		if (!florence->status->resize_dragged) {
 			if (dx > -slop && dx < slop && dy > -slop && dy < slop) {
+				END_FUNC
+				return FALSE;
+			}
+			min_drag = florence->status->resize_scale0 * 0.05;
+			if (min_drag < 1.0)
+				min_drag = 1.0;
+			if (fabs(scale - florence->status->resize_scale0) <
+			    min_drag) {
 				END_FUNC
 				return FALSE;
 			}
 			florence->status->resize_dragged = TRUE;
 		}
 		/* Drag SE grows, NW shrinks; ~400px -> +/-100% scale. */
-		factor = 1.0 + ((gdouble)(dx + dy) / 800.0);
-		if (factor < 0.45) factor = 0.45;
-		if (factor > 2.5) factor = 2.5;
-		scale = florence->status->resize_scale0 * factor;
 		view_live_scale(florence->view, scale,
 		    florence->status->resize_pin_x,
 		    florence->status->resize_pin_y);
