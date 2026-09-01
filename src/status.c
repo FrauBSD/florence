@@ -950,40 +950,24 @@ void status_set_resizing(struct status *status, gboolean resizing)
 		if (status->view) {
 			/*
 			 * Click restores cold-start size; drag keeps the live
-			 * scale. Decide at release - not via sticky
-			 * resize_dragged. Mid-click jitter past slop used to
-			 * mark a drag so the first click only redrew (commit
-			 * flash) and a second click was needed to restore.
+			 * scale. Keep live size only for an intentional drag:
+			 * left the press-slop AND changed scale by >= 5% (min
+			 * 1.0). Pointer-at-release checks were too tight under
+			 * seat-grab chatter (CLI worse than FVWM): first click
+			 * only committed a redraw (flash), second restored.
 			 */
 			gboolean restore = FALSE;
 
 			if (status->resize_scale_launch > 0.0) {
-				GdkDevice *ptr;
-				gint x = 0, y = 0, dx, dy;
-				const gint slop = 16;
-				gdouble delta, max_click;
+				gdouble delta, min_drag;
 
-				ptr = gdk_seat_get_pointer(
-				    gdk_display_get_default_seat(
-					gdk_display_get_default()));
-				if (ptr)
-					gdk_device_get_position(ptr, NULL, &x, &y);
-				dx = x - status->resize_root_x;
-				dy = y - status->resize_root_y;
-				if (dx > -slop && dx < slop &&
-				    dy > -slop && dy < slop)
-					restore = TRUE;
-
-				/*
-				 * Pointer can sit just outside slop after grab
-				 * chatter while scale barely moved - still a
-				 * click.
-				 */
 				delta = fabs(status->view->scalex -
 				    status->resize_scale0);
-				max_click = status->resize_scale0 *
-				    (2.0 * (gdouble)slop / 800.0) + 0.5;
-				if (delta < max_click)
+				min_drag = status->resize_scale0 * 0.05;
+				if (min_drag < 1.0)
+					min_drag = 1.0;
+				if (!(status->resize_dragged &&
+				    delta >= min_drag))
 					restore = TRUE;
 			}
 			if (restore) {

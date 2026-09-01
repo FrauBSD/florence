@@ -59,6 +59,8 @@ static int session_in_portrait_fit;
 
 void view_create_window_mask(struct view *view);
 void view_live_scale(struct view *view, gdouble scale, gint pin_x, gint pin_y);
+void view_configure(GtkWidget *window, GdkEventConfigure *pConfig,
+    struct view *view);
 
 static int
 session_name_is_internal(const char *name)
@@ -657,6 +659,55 @@ void view_resize (struct view *view)
 static int view_shape_drag_suspended;
 static guint view_shape_drag_resume_id;
 
+/* Reconnect configure after callers disconnect it around programmatic resize. */
+static void
+view_configure_handler_ensure(struct view *view)
+{
+	if (!view || !view->window || view->configure_handler)
+		return;
+	if (view->status &&
+	    (status_get_resizing(view->status) ||
+	    status_get_moving(view->status)))
+		return;
+	view->configure_handler = g_signal_connect(G_OBJECT(view->window),
+	    "configure-event", G_CALLBACK(view_configure), view);
+}
+
+/*
+ * After extension / place / shape churn, GDK damage can stop delivering while
+ * hit-testing still works (sounds, no redraws). Hide/show recovered; force a
+ * full paint path instead.
+ */
+static void
+view_redraw_settle(struct view *view)
+{
+	GdkWindow *gdkw;
+	GdkRectangle rect;
+
+	if (!view || !view->window)
+		return;
+	view_configure_handler_ensure(view);
+	if (view->background) {
+		cairo_surface_destroy(view->background);
+		view->background = NULL;
+	}
+	if (view->symbols) {
+		cairo_surface_destroy(view->symbols);
+		view->symbols = NULL;
+	}
+	gdkw = gtk_widget_get_window(GTK_WIDGET(view->window));
+	if (gdkw && gtk_widget_get_mapped(GTK_WIDGET(view->window))) {
+		view_create_window_mask(view);
+		rect.x = 0;
+		rect.y = 0;
+		rect.width = (gint)view->width;
+		rect.height = (gint)view->height;
+		gdk_window_invalidate_rect(gdkw, &rect, TRUE);
+		gdk_display_sync(gdk_window_get_display(gdkw));
+	}
+	gtk_widget_queue_draw(GTK_WIDGET(view->window));
+}
+
 static int
 view_needs_shape_fallback(struct view *view)
 {
@@ -731,6 +782,9 @@ view_greeter_live_drag_end(struct view *view)
 		view_shape_drag_resume_id = 0;
 	}
 	view_shape_drag_resume(view);
+	view_configure_handler_ensure(view);
+	if (view && view->window)
+		gtk_widget_queue_draw(GTK_WIDGET(view->window));
 }
 
 /*
@@ -857,6 +911,7 @@ void view_live_scale_commit (struct view *view)
 	}
 	view_create_window_mask(view);
 	gtk_widget_queue_draw(GTK_WIDGET(view->window));
+	view_configure_handler_ensure(view);
 	END_FUNC
 }
 
@@ -868,6 +923,7 @@ void view_restore_open_position (struct view *view)
 	if (!view || !view->window)
 		return;
 	session_place_keyboard(view);
+	view_redraw_settle(view);
 #else
 	gint x, y;
 
@@ -883,6 +939,7 @@ void view_restore_open_position (struct view *view)
 	gtk_window_move(view->window, x, y);
 	settings_set_int(SETTINGS_XPOS, x);
 	settings_set_int(SETTINGS_YPOS, y);
+	view_redraw_settle(view);
 #endif
 	END_FUNC
 }
@@ -1414,9 +1471,10 @@ void view_draw_key (struct view *view, cairo_t *context, struct key *key)
 	struct keyboard *keyboard;
 	if (key) {
 		keyboard=(struct keyboard *)key_get_keyboard(key);
+		/* Use view size: GTK3 draw targets are often image surfaces. */
 		keyboard_focus_draw(keyboard, context,
-			(gdouble)cairo_xlib_surface_get_width(view->background),
-			(gdouble)cairo_xlib_surface_get_height(view->background),
+			(gdouble)view->width,
+			(gdouble)view->height,
 			view->style, key, view->status);
 	}
 	END_FUNC
@@ -1488,11 +1546,7 @@ void view_expose (GtkWidget *window, cairo_t* context, struct view *view)
 #endif
 
 	/* restore configure event handler (not during live-resize/move). */
-	if (!view->configure_handler &&
-	    !(view->status && (status_get_resizing(view->status) ||
-	      status_get_moving(view->status))))
-		view->configure_handler=g_signal_connect(G_OBJECT(view->window), "configure-event",
-			G_CALLBACK(view_configure), view);
+	view_configure_handler_ensure(view);
 	END_FUNC
 }
 
@@ -1617,9 +1671,8 @@ void view_update_extensions(GSettings *settings, gchar *key, gpointer user_data)
 	view->background=NULL;
 	if (view->symbols) cairo_surface_destroy(view->symbols);
 	view->symbols=NULL;
-	view_create_window_mask(view);
 	status_focus_set(view->status, NULL);
-	gtk_widget_queue_draw(GTK_WIDGET(view->window));
+	view_redraw_settle(view);
 	END_FUNC
 }
 
