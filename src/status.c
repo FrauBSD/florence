@@ -22,6 +22,7 @@
 #include "trace.h"
 #include "status.h"
 #include "settings.h"
+#include <math.h>
 #include <X11/Xproto.h>
 
 /* check for record events every 1/10th of a second */
@@ -948,29 +949,44 @@ void status_set_resizing(struct status *status, gboolean resizing)
 		}
 		if (status->view) {
 			/*
-			 * Click (no drag past slop): restore cold-start size.
-			 * Drag: keep the live scale already applied.
-			 *
-			 * Also treat as click when press->release never changed
-			 * the pixel size: past-slop jitter can set resize_dragged
-			 * without a real resize, which used to eat the first
-			 * click-to-restore after a small drag.
+			 * Click restores cold-start size; drag keeps the live
+			 * scale. Decide at release - not via sticky
+			 * resize_dragged. Mid-click jitter past slop used to
+			 * mark a drag so the first click only redrew (commit
+			 * flash) and a second click was needed to restore.
 			 */
-			gboolean restore = !status->resize_dragged;
+			gboolean restore = FALSE;
 
-			if (!restore && status->resize_scale0 >= 10.0) {
-				guint w0 = (guint)(status->view->vwidth *
-				    status->resize_scale0 + 0.5);
-				guint h0 = (guint)(status->view->vheight *
-				    status->resize_scale0 + 0.5);
+			if (status->resize_scale_launch > 0.0) {
+				GdkDevice *ptr;
+				gint x = 0, y = 0, dx, dy;
+				const gint slop = 16;
+				gdouble delta, max_click;
 
-				if (w0 < 1) w0 = 1;
-				if (h0 < 1) h0 = 1;
-				if (status->view->width == w0 &&
-				    status->view->height == h0)
+				ptr = gdk_seat_get_pointer(
+				    gdk_display_get_default_seat(
+					gdk_display_get_default()));
+				if (ptr)
+					gdk_device_get_position(ptr, NULL, &x, &y);
+				dx = x - status->resize_root_x;
+				dy = y - status->resize_root_y;
+				if (dx > -slop && dx < slop &&
+				    dy > -slop && dy < slop)
+					restore = TRUE;
+
+				/*
+				 * Pointer can sit just outside slop after grab
+				 * chatter while scale barely moved - still a
+				 * click.
+				 */
+				delta = fabs(status->view->scalex -
+				    status->resize_scale0);
+				max_click = status->resize_scale0 *
+				    (2.0 * (gdouble)slop / 800.0) + 0.5;
+				if (delta < max_click)
 					restore = TRUE;
 			}
-			if (restore && status->resize_scale_launch > 0.0) {
+			if (restore) {
 				view_live_scale(status->view,
 				    status->resize_scale_launch,
 				    status->resize_pin_x,
