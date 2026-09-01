@@ -18033,8 +18033,6 @@ printf '%s\n' "#define ENABLE_XTST /**/" >>confdefs.h
 
 fi
 	if test "x$with_xrecord" != "xno"; then
-		{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: WARNING: Xorg RECORD extension is severely broken in version 1.6 of Xorg: see bugs http://bugs.freedesktop.org/show_bug.cgi?id=20500 and http://bugs.freedesktop.org/show_bug.cgi?id=21971 ; Please disable xrecord if you affected by this bug: --without-xrecord option" >&5
-printf '%s\n' "$as_me: WARNING: Xorg RECORD extension is severely broken in version 1.6 of Xorg: see bugs http://bugs.freedesktop.org/show_bug.cgi?id=20500 and http://bugs.freedesktop.org/show_bug.cgi?id=21971 ; Please disable xrecord if you affected by this bug: --without-xrecord option" >&2;}
 
 printf '%s\n' "#define ENABLE_XRECORD \"xrecord\"" >>confdefs.h
 

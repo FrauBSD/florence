@@ -88,7 +88,6 @@ fi
 if test "x$with_xtst" != "xno"; then
 	PKG_CHECK_MODULES([XTST], [xtst], AC_DEFINE([ENABLE_XTST], [], [Xtst extension enabled.]), AC_MSG_ERROR(Could not configure xtst. Please either install xtst or disable it: --without-xtst configure option))
 	if test "x$with_xrecord" != "xno"; then
-		AC_MSG_WARN([Xorg RECORD extension is severely broken in version 1.6 of Xorg: see bugs http://bugs.freedesktop.org/show_bug.cgi?id=20500 and http://bugs.freedesktop.org/show_bug.cgi?id=21971 ; Please disable xrecord if you affected by this bug: --without-xrecord option])
 		AC_DEFINE(ENABLE_XRECORD, ["xrecord"], [xrecord extension is enabled])
 	fi
 fi
