@@ -186,7 +186,7 @@ session_ctl_place_icon(struct controller *controller)
 	if (!controller || !controller->controller_icon)
 		return;
 	session_ctl_icon_xy(&ix, &iy);
-	/* gtk move only — do not settings_set (keyfile rewrite). */
+	/* gtk move only - do not settings_set (keyfile rewrite). */
 	gtk_window_move(GTK_WINDOW(controller->controller_icon), ix, iy);
 }
 

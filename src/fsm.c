@@ -44,7 +44,7 @@ static fsm_action fsm_lock[]={ status_lock, status_update_view, NULL };
 static fsm_action fsm_unlock[]={ status_unlock, status_update_view, NULL };
 /*
  * Press latched mods, send the character, X-release mods. Do NOT unlatch /
- * rebuild symbols here — that hid Fn media icons while the mouse was still
+ * rebuild symbols here - that hid Fn media icons while the mouse was still
  * held for auto-repeat. Unlatch + symbol refresh run on ButtonRelease
  * (fsm_release_latched). Locked mods stay locked.
  */
@@ -209,7 +209,7 @@ void fsm_process(struct status *status, struct key *key, enum fsm_event event)
 		/*
 		 * Caps/Num are lockers even when modmap is 0 (mask lives on the
 		 * XKB LockMods action). Checking modifier first forced NORMAL
-		 * and skipped the lock FSM — no green Caps indicator.
+		 * and skipped the lock FSM - no green Caps indicator.
 		 */
 		type = key_is_locker(key) ? FSM_KEY_LOCKER :
 			(key_get_modifier(key) ? FSM_KEY_MODIFIER : FSM_KEY_NORMAL);
@@ -239,7 +239,7 @@ void fsm_process(struct status *status, struct key *key, enum fsm_event event)
 		}
 		/*
 		 * Guard only sub-80ms bounce (duplicate press). Do not block
-		 * intentional double-tap-to-lock at 100–400ms.
+		 * intentional double-tap-to-lock at 100-400ms.
 		 */
 		if (type == FSM_KEY_MODIFIER &&
 		    (event == FSM_PRESS || (touch && event == FSM_RELEASE))) {

@@ -60,7 +60,7 @@ enum key_action_type {
 /*
  * Synthetic Gdk mask for the on-screen Fn sticky layer. Must not collide with
  * Shift/Ctrl/Alt/Super masks Florence already latches. Layout XML uses decimal
- * 32 when referencing this bit on <modifier> (unused today — Fn remap is C).
+ * 32 when referencing this bit on <modifier> (unused today - Fn remap is C).
  */
 #define FLORENCE_FN_MASK ((GdkModifierType)GDK_MOD3_MASK)
 

@@ -166,7 +166,7 @@ session_builtin_panel(gint *px, gint *py, gint *pw, gint *ph)
 	GdkRectangle geo;
 	GdkMonitor *m;
 
-	/* Live CRTC first — login FLORENCE_PANEL_* goes stale after rotate. */
+	/* Live CRTC first - login FLORENCE_PANEL_* goes stale after rotate. */
 	if (session_panel_xrandr(px, py, pw, ph))
 		return (1);
 
@@ -280,7 +280,7 @@ session_fit_scale_for_panel(struct view *view, gint pw, gint ph, gint margin,
 		/*
 		 * Landscape: always restore preferred scale when we were in
 		 * portrait fit or the shell is still portrait-shrunk. Do not
-		 * clear the saved scale — a mid-rotate spurious landscape
+		 * clear the saved scale - a mid-rotate spurious landscape
 		 * event must not forget it for the real settle.
 		 */
 		want = session_preferred_landscape_scale(view, cur);
@@ -296,7 +296,7 @@ session_fit_scale_for_panel(struct view *view, gint pw, gint ph, gint margin,
 
 /*
  * True if keyboard center sits on a non-eDP connected output (user parked it
- * on an external). Off-desk / below-panel gaps are NOT "external" — those
+ * on an external). Off-desk / below-panel gaps are NOT "external" - those
  * must be re-homed (POLA on show after rotate).
  */
 static int
@@ -442,7 +442,7 @@ session_place_keyboard(struct view *view)
 			gdk_window_move_resize(gdkw, x, y, ww, wh);
 			/*
 			 * Match greeter: refresh XShape after place. Skip
-			 * settings_set_int here — keyfile rewrite mid-RandR
+			 * settings_set_int here - keyfile rewrite mid-RandR
 			 * races FVWM and can leave the mapped shell stuck.
 			 */
 			if (settings_get_bool(SETTINGS_TRANSPARENT) &&
@@ -492,7 +492,7 @@ session_monitors_reposition_idle(gpointer data)
 		return FALSE;
 	/*
 	 * Always re-home on RandR settle. Pre-rotate absolute coords can land
-	 * on an external CRTC after P→L; skipping those left the OSK stuck
+	 * on an external CRTC after P->L; skipping those left the OSK stuck
 	 * until hide/show. (view_show still honors on-external parking.)
 	 */
 	session_place_keyboard(view);
@@ -551,7 +551,7 @@ void view_show (struct view *view)
 	gtk_widget_show(GTK_WIDGET(view->window));
 	/* Some window managers forget it */
 	gtk_window_set_keep_above(view->window, TRUE);
-	/* Do not set urgency_hint — WMs pulse/flash it and the hover flickers. */
+	/* Do not set urgency_hint - WMs pulse/flash it and the hover flickers. */
 #ifndef FLORENCE_GREETER
 	/*
 	 * Re-home for current eDP orientation unless parked on an external.
@@ -581,7 +581,7 @@ void view_hide (struct view *view)
 	 * Drop hover/press highlight before unmap. Hide often delivers
 	 * LeaveNotify with GDK_CROSSING_UNGRAB (ignored by flo_mouse_leave
 	 * to avoid compositor flicker), and status_focus_set(NULL) refuses
-	 * while pressed is still set mid-release — so the reduce/close key
+	 * while pressed is still set mid-release - so the reduce/close key
 	 * stayed focused and drew highlighted when the glyph reopened.
 	 */
 	if (view && view->status) {
@@ -735,7 +735,7 @@ view_greeter_live_drag_end(struct view *view)
 
 /*
  * Live-resize: window size always matches content (grow and shrink). Pin is
- * client NW root origin at press. Art is rebuilt each frame — never stretched.
+ * client NW root origin at press. Art is rebuilt each frame - never stretched.
  */
 void view_live_scale (struct view *view, gdouble scale, gint pin_x, gint pin_y)
 {
@@ -1249,7 +1249,7 @@ void view_update(struct view *view, struct key *key, gboolean statechange)
 			 * multiplies by SETTINGS_SCALEX/Y; after RandR
 			 * portrait fit, view_live_scale updates only the
 			 * live scale, so settings-based damage is SE-shifted
-			 * and only ~¼ of the key highlight redraws.
+			 * and only ~1/4 of the key highlight redraws.
 			 */
 			kbd = (struct keyboard *)key_get_keyboard(key);
 			zx = view->scalex;
@@ -1385,7 +1385,7 @@ void view_draw_background (struct view *view, cairo_t *context)
 		view_background_draw(view, context);
 	}
 
-	/* paint the background (never stretch — live-scale rebuilds art) */
+	/* paint the background (never stretch - live-scale rebuilds art) */
 	cairo_set_operator(context, CAIRO_OPERATOR_OVER);
 	cairo_set_source_surface(context, view->background, 0, 0);
 	cairo_paint(context);
@@ -1498,7 +1498,7 @@ void view_expose (GtkWidget *window, cairo_t* context, struct view *view)
 
 /*
  * Match Caps/Num (and other XKB lockers) to the real lock LEDs so the OSK
- * shows green when active — needed in tablet mode with no physical LED view.
+ * shows green when active - needed in tablet mode with no physical LED view.
  */
 static void
 view_sync_lockers(struct view *view)
@@ -1553,7 +1553,7 @@ void view_on_keys_changed(gpointer user_data)
 	guint group;
 #endif
 
-	/* Caps/Num LED sync only — no full redraw (that flickered hover). */
+	/* Caps/Num LED sync only - no full redraw (that flickered hover). */
 	view_sync_lockers(view);
 
 #ifdef ENABLE_XKB
@@ -1736,7 +1736,7 @@ struct view *view_new (struct status *status, struct style *style, GSList *keybo
 	view_screen_changed(GTK_WIDGET(view->window), NULL, view);
 	g_signal_connect(G_OBJECT(view->window), "destroy", G_CALLBACK(view_on_destroy), view);
 	/*
-	 * hide-on-start: realize for shape/mask, but do not map — mapping then
+	 * hide-on-start: realize for shape/mask, but do not map - mapping then
 	 * hiding flashes the full keyboard for a frame (glyph-only startup).
 	 */
 	if (settings_get_bool(SETTINGS_HIDE_ON_START)) {

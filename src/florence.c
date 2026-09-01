@@ -123,7 +123,7 @@ gboolean flo_mouse_leave_event (GtkWidget *window, GdkEvent *event, gpointer use
 		/*
 		 * Growing/shrinking moves the window edge under a stationary
 		 * pointer and synthesizes LeaveNotify. Do not re-apply scale
-		 * here — that double-fired with motion and jittered position.
+		 * here - that double-fired with motion and jittered position.
 		 * Seat grab still delivers MotionNotify for tracking.
 		 */
 		END_FUNC
@@ -139,7 +139,7 @@ gboolean flo_mouse_leave_event (GtkWidget *window, GdkEvent *event, gpointer use
 
 	/*
 	 * Compositor/WM restacks synthesize LeaveNotify while the pointer is
-	 * still over us — clearing hover then made the highlight flicker every
+	 * still over us - clearing hover then made the highlight flicker every
 	 * few seconds. Only clear when the pointer is truly outside.
 	 */
 	if (event && event->type == GDK_LEAVE_NOTIFY) {
@@ -207,7 +207,7 @@ gboolean flo_button_press_event (GtkWidget *window, GdkEventButton *event, gpoin
 		 * Move handle: always Florence live-move + seat grab.
 		 *
 		 * Touchscreen gestures feed XTest Button1, which GDK reports as
-		 * a mouse — begin_move_drag then leaves Button1 latched after
+		 * a mouse - begin_move_drag then leaves Button1 latched after
 		 * finger-up and breaks all subsequent 1fg pointer motion.
 		 * Physical mouse also uses this path (seat grab keeps motion).
 		 *
@@ -324,8 +324,8 @@ gboolean flo_timer_update(gpointer data)
 }
 
 /* Ensure the keyboard stays above; no periodic present/raise.
- * (Stock florence called gtk_window_present() every 1s — that synthesizes
- * leave/enter and flickers hover highlights ~1–2×/sec.) */
+ * (Stock florence called gtk_window_present() every 1s - that synthesizes
+ * leave/enter and flickers hover highlights ~1-2x/sec.) */
 void flo_start_keep_on_top(struct florence *florence, gboolean keep_on_top)
 {
 	START_FUNC
@@ -406,7 +406,7 @@ gboolean flo_mouse_move_event(GtkWidget *window, GdkEvent *event, gpointer user_
 			}
 			florence->status->resize_dragged = TRUE;
 		}
-		/* Drag SE grows, NW shrinks; ~400px → ±100% scale. */
+		/* Drag SE grows, NW shrinks; ~400px -> +/-100% scale. */
 		factor = 1.0 + ((gdouble)(dx + dy) / 800.0);
 		if (factor < 0.45) factor = 0.45;
 		if (factor > 2.5) factor = 2.5;

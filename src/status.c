@@ -280,7 +280,7 @@ void status_update_view (struct status *status, struct key *key)
 	START_FUNC
 	/*
 	 * Stock Florence: view_update(..., key_get_modifier(key)).
-	 * Non-zero modifiers (Shift, AltGr, Caps, …) rebuild the symbols
+	 * Non-zero modifiers (Shift, AltGr, Caps, ...) rebuild the symbols
 	 * surface so labels switch to capitals / shifted punctuation.
 	 *
 	 * A later anti-flicker change forced FALSE always, which left Shift
@@ -472,9 +472,9 @@ void status_unlatchorlock (struct status *status, struct key *key, enum key_stat
 
 /*
  * Touch bounce is typically <80ms between duplicate presses. Intentional
- * taps (latch→lock, lock→off, off→latch) are usually ≥100ms apart.
+ * taps (latch->lock, lock->off, off->latch) are usually >=100ms apart.
  *
- * IMPORTANT: do not special-case RELEASED→LATCHED. After unlock, a bounce
+ * IMPORTANT: do not special-case RELEASED->LATCHED. After unlock, a bounce
  * press would immediately re-latch and the cycle became on/lock/on/lock
  * with no way to turn Shift off without typing a character.
  */
@@ -765,7 +765,7 @@ struct status *status_new(const gchar *focus_back)
 	status_record_start(status);
 	g_timeout_add(STATUS_EVENTCHECK_INTERVAL, status_record_process, (gpointer)status);
 #endif
-	status->spi=FALSE; /* XTest only — ATSPI+XTest double-delivered keycodes */
+	status->spi=FALSE; /* XTest only - ATSPI+XTest double-delivered keycodes */
 	if (focus_back) {
 		status->w_focus=status_find_window(focus_back);
 	}

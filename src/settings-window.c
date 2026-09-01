@@ -49,7 +49,7 @@
 #endif
 
 static struct settings_window *settings_window=NULL;
-/* TRUE while syncing widgets from settings — ignore widget→settings signals. */
+/* TRUE while syncing widgets from settings - ignore widget->settings signals. */
 static gboolean settings_window_updating=FALSE;
 void settings_window_extension(GtkToggleButton *button, gchar *name);
 static gboolean settings_window_on_delete(GtkWidget *window, GdkEvent *event,
@@ -702,7 +702,7 @@ void settings_window_close(GtkWidget *window, GtkWidget *button)
 	do_exit = settings_window->gtk_exit;
 
 	if (win && GTK_IS_WIDGET(win)) {
-		/* Prevent glade destroy→close re-entry from double-freeing. */
+		/* Prevent glade destroy->close re-entry from double-freeing. */
 		g_signal_handlers_disconnect_by_func(win,
 			G_CALLBACK(settings_window_close), win);
 		g_signal_handlers_disconnect_by_func(win,
@@ -773,7 +773,7 @@ settings_window_find_osk(gint *ox, gint *oy, gint *ow, gint *oh)
 		if (!XGetWindowAttributes(dpy, wins[i], &wa) ||
 		    wa.map_state != IsViewable)
 			continue;
-		/* Float glyph is ~64×44; keyboard is much larger. */
+		/* Float glyph is ~64x44; keyboard is much larger. */
 		if (wa.width < 200 || wa.height < 120)
 			continue;
 		XTranslateCoordinates(dpy, wins[i], root, 0, 0, &x, &y, &child);
@@ -929,7 +929,7 @@ void settings_window_new(gboolean exit)
 	/*
 	 * Glade marks the window visible; hide immediately and set a distinct
 	 * WM_CLASS before remap so FVWM OSK styles (NeverFocus/NoTitle) do not
-	 * apply — otherwise prefs cannot be focused, closed, or dismissed.
+	 * apply - otherwise prefs cannot be focused, closed, or dismissed.
 	 */
 	gtk_widget_hide(cfg);
 	gtk_window_set_role(GTK_WINDOW(cfg), "preferences");
@@ -939,7 +939,7 @@ void settings_window_new(gboolean exit)
 	gtk_window_set_accept_focus(GTK_WINDOW(cfg), TRUE);
 
 	/*
-	 * Upstream stock button is gtk-cancel but only reverts — it does not
+	 * Upstream stock button is gtk-cancel but only reverts - it does not
 	 * dismiss. Relabel so it matches behaviour (Close dismisses).
 	 */
 	{

@@ -71,18 +71,18 @@ static unsigned int
 florence_fn_remap(unsigned int code)
 {
 	switch (code) {
-	case 67: return 121;	/* F1  → XF86AudioMute */
-	case 68: return 122;	/* F2  → XF86AudioLowerVolume */
-	case 69: return 123;	/* F3  → XF86AudioRaiseVolume */
-	case 70: return 176;	/* F4  → XF86AudioRewind */
-	case 71: return 172;	/* F5  → XF86AudioPlay (pause on shift) */
-	case 72: return 216;	/* F6  → XF86AudioForward */
-	case 73: return 232;	/* F7  → XF86MonBrightnessDown */
-	case 74: return 233;	/* F8  → XF86MonBrightnessUp */
-	case 75: return 235;	/* F9  → XF86Display (mirror) */
-	case 76: return 255;	/* F10 → XF86RFKill (airplane) */
-	case 95: return 107;	/* F11 → Print (screenshot) */
-	case 96: return 234;	/* F12 → XF86AudioMedia (audio-output-toggle/osd) */
+	case 67: return 121;	/* F1  -> XF86AudioMute */
+	case 68: return 122;	/* F2  -> XF86AudioLowerVolume */
+	case 69: return 123;	/* F3  -> XF86AudioRaiseVolume */
+	case 70: return 176;	/* F4  -> XF86AudioRewind */
+	case 71: return 172;	/* F5  -> XF86AudioPlay (pause on shift) */
+	case 72: return 216;	/* F6  -> XF86AudioForward */
+	case 73: return 232;	/* F7  -> XF86MonBrightnessDown */
+	case 74: return 233;	/* F8  -> XF86MonBrightnessUp */
+	case 75: return 235;	/* F9  -> XF86Display (mirror) */
+	case 76: return 255;	/* F10 -> XF86RFKill (airplane) */
+	case 95: return 107;	/* F11 -> Print (screenshot) */
+	case 96: return 234;	/* F12 -> XF86AudioMedia (audio-output-toggle/osd) */
 	default: return 0;
 	}
 }
@@ -257,7 +257,7 @@ struct key_mod *key_mod_find(struct key *key, GdkModifierType mod)
 		list=list->next;
 	}
 	/*
-	 * Greeter: never switch Hide (reduce) → Close on Alt. There is no
+	 * Greeter: never switch Hide (reduce) -> Close on Alt. There is no
 	 * Start-menu relaunch path under XDM; quitting Florence requires zap.
 	 */
 	if (florence_in_greeter() &&
@@ -373,7 +373,7 @@ void key_press(struct key *key, struct status *status)
 						view_greeter_live_drag_begin(status->view);
 						break;
 					case KEY_FN:
-						/* Sticky layer only — no X event. */
+						/* Sticky layer only - no X event. */
 						break;
 					case KEY_BIGGER:
 					case KEY_SMALLER:
@@ -470,9 +470,9 @@ void key_release(struct key *key, struct status *status)
 					 * Stock bigger/smaller multiplied scale with no
 					 * bounds and notified GSettings on every click.
 					 * That raced keep_ratio configure handling and
-					 * could grow the window without limit — SIGSEGV
-					 * within seconds of mashing +/−. Clamp to the
-					 * same range later used by live resize (10–72).
+					 * could grow the window without limit - SIGSEGV
+					 * within seconds of mashing +/-. Clamp to the
+					 * same range later used by live resize (10-72).
 					 */
 					case KEY_BIGGER: {
 						gdouble sx = settings_get_double(SETTINGS_SCALEX) * 1.05;
@@ -562,11 +562,11 @@ void key_symbol_draw(struct key *key, struct style *style,
 		case KEY_CODE: {
 			unsigned int code = ((struct key_code *)mod->data)->code;
 			GdkModifierType gmod = status_globalmod_get(status);
-			/* Label lookup: keep Shift/Caps/Num/AltGr — strip
+			/* Label lookup: keep Shift/Caps/Num/AltGr - strip
 			 * Ctrl/Alt/Super. F-keys are XKB type CTRL+ALT; with
 			 * Ctrl or Alt alone GDK often returns NoSymbol, and
 			 * Ctrl+Alt yields XF86Switch_VT_* with no style glyph,
-			 * so F1–F12 (and similarly BackSpace) go blank. */
+			 * so F1-F12 (and similarly BackSpace) go blank. */
 			GdkModifierType drawmod = gmod & (GDK_SHIFT_MASK |
 			    GDK_LOCK_MASK | GDK_MOD2_MASK | GDK_MOD5_MASK);
 			guint keyval = 0;
@@ -574,7 +574,7 @@ void key_symbol_draw(struct key *key, struct style *style,
 
 			/*
 			 * Fn-layer icons: draw by style symbol name. Do not
-			 * round-trip through gdk_keyval_from_name — XF86RFKill
+			 * round-trip through gdk_keyval_from_name - XF86RFKill
 			 * resolves to VoidSymbol (0xffffff), which is non-zero
 			 * and yields a blank key; Rewind/Play/Forward names
 			 * also need not depend on GDK's XF86 catalogue.
