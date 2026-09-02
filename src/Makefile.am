@@ -17,8 +17,11 @@ florence_CPPFLAGS = -I$(top_srcdir) -DICONDIR="\"$(ICONDIR)\""\
    $(LIBGNOME_CFLAGS) $(LIBNOTIFY_CFLAGS) $(XTST_CFLAGS) $(AT_SPI2_CFLAGS)\
    $(X11_CFLAGS) $(XRANDR_CFLAGS) $(INCLUDES)
 florence_LDFLAGS = -Wl,--export-dynamic
+# Use the in-tree .la, not -lflorence-1.0: with --disable-static libtool
+# otherwise resolves -l to an already-installed /usr/local libflorence and
+# the binary fails to link when building from a clean ports tree.
 florence_LDADD = $(DEPS_LIBS) $(LIBM) $(X11_LIBS) $(XRANDR_LIBS) $(LIBGNOME_LIBS)\
-   $(LIBNOTIFY_LIBS) $(XTST_LIBS) $(AT_SPI2_LIBS) $(GTK3_LIBS) -lflorence-1.0
+   $(LIBNOTIFY_LIBS) $(XTST_LIBS) $(AT_SPI2_LIBS) $(GTK3_LIBS) libflorence-1.0.la
 
 libflorence_1_0_la_SOURCES = lib/florence.c
 library_includedir=$(includedir)/florence-1.0

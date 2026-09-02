@@ -22,7 +22,17 @@ See [`NEWS`](./NEWS). Highlights:
 - **Fix:** fatal-help mail goes to `dteske@FreeBSD.org`
 - **Fix:** `compactfn` ↔ `standardfn` treated as one Function-keys extension
 - **Fix:** live-resize starts from the on-screen scale (no shrink-first frame)
+- **Fix:** resize click restores cold-start size; drag keeps the live scale
+- **Fix:** push WM min-size before shrink so restore and extension toggles
+  stick (no two-click flash; no visual freeze until a live drag)
+- **Fix:** prefs Layout combo matches empty / theme layout paths so Navigation
+  keys stay listed for Standard / Alternative
+- **Fix:** floating glyph context menu when opened over DBus
+- **Fix:** GTK3 / librsvg / monitor / seat API warnings; drop obsolete Xorg
+  1.6 RECORD configure warning
 - **Layout:** navigation extension gains PrtSc / ScrLk / Pause
+- **Build:** link against in-tree `libflorence-1.0.la` so `--disable-static`
+  builds do not need an already-installed `/usr/local` libflorence
 - **Build:** `sounds.xml` regenerates on Makefile change (correct FreeBSD
   `/usr/local` sound paths)
 - **Build:** GNU build system refreshed for Automake 1.18 / Autoconf 2.73;
